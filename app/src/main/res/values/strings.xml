@@ -11,10 +11,14 @@
     <string name="dashboard_subtitle">A clear view of your personal finances.</string>
     <string name="balance_total">Total balance</string>
     <string name="balance_placeholder">0 RSD</string>
+    <string name="balance_currency_label">Primary currency: RSD</string>
     <string name="income_this_month">Income this month</string>
     <string name="expenses_this_month">Expenses this month</string>
     <string name="expense_chart_title">Spending overview</string>
     <string name="expense_chart_placeholder">Your spending chart will appear here.</string>
+    <string name="chart_last_7_days">Last 7 days</string>
+    <string name="dashboard_recent_transactions">Recent activity</string>
+    <string name="view_all">View all</string>
 
     <string name="transactions_title">Transactions</string>
     <string name="transactions_empty">No transactions yet.</string>
@@ -22,6 +26,8 @@
 
     <string name="analytics_title">Analytics</string>
     <string name="analytics_placeholder">Charts and comparisons will appear here.</string>
+    <string name="net_this_month">Net this month</string>
+    <string name="spending_by_category">Spending by category</string>
 
     <string name="add_transaction">Add transaction</string>
     <string name="add_expense">Expense</string>

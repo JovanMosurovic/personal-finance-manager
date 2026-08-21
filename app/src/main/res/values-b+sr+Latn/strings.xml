@@ -12,10 +12,14 @@
     <string name="dashboard_subtitle">Jasan pregled vaših ličnih finansija.</string>
     <string name="balance_total">Ukupno stanje</string>
     <string name="balance_placeholder">0 RSD</string>
+    <string name="balance_currency_label">Osnovna valuta: RSD</string>
     <string name="income_this_month">Prihodi ovog meseca</string>
     <string name="expenses_this_month">Troškovi ovog meseca</string>
     <string name="expense_chart_title">Pregled potrošnje</string>
     <string name="expense_chart_placeholder">Grafikon potrošnje će se pojaviti ovde.</string>
+    <string name="chart_last_7_days">Poslednjih 7 dana</string>
+    <string name="dashboard_recent_transactions">Nedavna aktivnost</string>
+    <string name="view_all">Prikaži sve</string>
 
     <string name="transactions_title">Transakcije</string>
     <string name="transactions_empty">Još nema transakcija.</string>
@@ -23,6 +27,8 @@
 
     <string name="analytics_title">Analitika</string>
     <string name="analytics_placeholder">Grafikoni i poređenja će se pojaviti ovde.</string>
+    <string name="net_this_month">Neto ovog meseca</string>
+    <string name="spending_by_category">Potrošnja po kategoriji</string>
 
     <string name="add_transaction">Dodaj transakciju</string>
     <string name="add_expense">Trošak</string>
