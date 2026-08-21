@@ -61,6 +61,53 @@ class FinanceRepository(
         )
     }
 
+    suspend fun updateTransaction(
+        transactionId: Long,
+        type: TransactionType,
+        amountMinor: Long,
+        merchant: String,
+        note: String
+    ) {
+        database.withTransaction {
+            val existingTransaction = database.transactionDao().getById(transactionId)
+                ?: return@withTransaction
+            val cleanedMerchant = merchant.trim()
+            val matchedRule = if (existingTransaction.isManuallyCategorized) {
+                null
+            } else {
+                database.keywordRuleDao()
+                    .getActiveRules()
+                    .firstOrNull { rule ->
+                        ruleAppliesToTransaction(rule, type) &&
+                            keywordMatches(rule, cleanedMerchant.normalizeForMatching())
+                    }
+            }
+
+            database.transactionDao().update(
+                existingTransaction.copy(
+                    type = type.name,
+                    amountMinor = amountMinor,
+                    merchant = cleanedMerchant,
+                    note = note.trim(),
+                    categoryId = if (existingTransaction.isManuallyCategorized) {
+                        existingTransaction.categoryId
+                    } else {
+                        matchedRule?.categoryId
+                    },
+                    matchedRuleId = if (existingTransaction.isManuallyCategorized) {
+                        null
+                    } else {
+                        matchedRule?.id
+                    }
+                )
+            )
+        }
+    }
+
+    suspend fun deleteTransaction(transactionId: Long) {
+        database.transactionDao().deleteById(transactionId)
+    }
+
     suspend fun addKeyword(categoryId: Long, keyword: String) {
         database.withTransaction {
             addKeywordInternal(categoryId, keyword)

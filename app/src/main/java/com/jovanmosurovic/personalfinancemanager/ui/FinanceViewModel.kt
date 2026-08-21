@@ -102,6 +102,30 @@ class FinanceViewModel(
         }
     }
 
+    fun updateTransaction(
+        transactionId: Long,
+        type: TransactionType,
+        amountMinor: Long,
+        merchant: String,
+        note: String
+    ) {
+        viewModelScope.launch {
+            repository.updateTransaction(
+                transactionId = transactionId,
+                type = type,
+                amountMinor = amountMinor,
+                merchant = merchant,
+                note = note
+            )
+        }
+    }
+
+    fun deleteTransaction(transactionId: Long) {
+        viewModelScope.launch {
+            repository.deleteTransaction(transactionId)
+        }
+    }
+
     fun assignCategory(
         transactionId: Long,
         categoryId: Long,

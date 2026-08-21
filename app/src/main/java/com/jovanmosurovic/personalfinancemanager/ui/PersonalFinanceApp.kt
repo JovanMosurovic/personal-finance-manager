@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
@@ -45,9 +48,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -59,9 +62,12 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -148,52 +154,60 @@ fun PersonalFinanceApp() {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (!showAddTransaction) {
-                Surface(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 8.dp,
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    NavigationBar(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
+                        )
                     ) {
-                        TopLevelDestination.entries.forEach { destination ->
-                            NavigationBarItem(
-                                selected = selectedRoute == destination.route,
-                                onClick = { selectedRoute = destination.route },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selectedRoute == destination.route) {
-                                            destination.selectedIcon
-                                        } else {
-                                            destination.icon
-                                        },
-                                        contentDescription = null
+                        NavigationBar(
+                            modifier = Modifier.fillMaxWidth(),
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            windowInsets = WindowInsets(0, 0, 0, 0)
+                        ) {
+                            TopLevelDestination.entries.forEach { destination ->
+                                NavigationBarItem(
+                                    selected = selectedRoute == destination.route,
+                                    onClick = { selectedRoute = destination.route },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selectedRoute == destination.route) {
+                                                destination.selectedIcon
+                                            } else {
+                                                destination.icon
+                                            },
+                                            contentDescription = null
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = stringResource(destination.labelRes),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    alwaysShowLabel = true,
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                },
-                                label = {
-                                    Text(
-                                        text = stringResource(destination.labelRes),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                },
-                                alwaysShowLabel = true,
-                                colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -217,6 +231,8 @@ fun PersonalFinanceApp() {
                     uiState = uiState,
                     onAddTransaction = { showAddTransaction = true },
                     onAssignCategory = financeViewModel::assignCategory,
+                    onUpdateTransaction = financeViewModel::updateTransaction,
+                    onDeleteTransaction = financeViewModel::deleteTransaction,
                     modifier = Modifier.padding(innerPadding)
                 )
 
@@ -584,7 +600,8 @@ private fun CompactTransactionRow(
         Text(
             text = formatMoney(if (isIncome) transaction.amountMinor else -transaction.amountMinor),
             style = MaterialTheme.typography.titleMedium,
-            color = accentColor
+            color = accentColor,
+            maxLines = 1
         )
     }
 }
@@ -619,10 +636,15 @@ private fun TransactionsScreen(
     uiState: FinanceUiState,
     onAddTransaction: () -> Unit,
     onAssignCategory: (Long, Long, Boolean) -> Unit,
+    onUpdateTransaction: (Long, TransactionType, Long, String, String) -> Unit,
+    onDeleteTransaction: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showOnlyUncategorized by rememberSaveable { mutableStateOf(false) }
     var selectedTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
+    var transactionForCategory by remember { mutableStateOf<TransactionEntity?>(null) }
+    var transactionBeingEdited by remember { mutableStateOf<TransactionEntity?>(null) }
+    var transactionPendingDeletion by remember { mutableStateOf<TransactionEntity?>(null) }
     val uncategorizedTransactions = uiState.transactions.filter { it.categoryId == null }
     val visibleTransactions = if (showOnlyUncategorized) {
         uncategorizedTransactions
@@ -720,16 +742,361 @@ private fun TransactionsScreen(
     }
 
     selectedTransaction?.let { transaction ->
-        CategoryAssignmentDialog(
+        TransactionDetailsDialog(
             transaction = transaction,
-            categories = uiState.categories,
+            category = uiState.categories.firstOrNull { it.id == transaction.categoryId },
             onDismiss = { selectedTransaction = null },
-            onConfirm = { categoryId, saveMerchantAsKeyword ->
-                onAssignCategory(transaction.id, categoryId, saveMerchantAsKeyword)
+            onEdit = {
+                transactionBeingEdited = transaction
+                selectedTransaction = null
+            },
+            onAssignCategory = {
+                transactionForCategory = transaction
+                selectedTransaction = null
+            },
+            onDelete = {
+                transactionPendingDeletion = transaction
                 selectedTransaction = null
             }
         )
     }
+
+    transactionForCategory?.let { transaction ->
+        CategoryAssignmentDialog(
+            transaction = transaction,
+            categories = uiState.categories,
+            onDismiss = { transactionForCategory = null },
+            onConfirm = { categoryId, saveMerchantAsKeyword ->
+                onAssignCategory(transaction.id, categoryId, saveMerchantAsKeyword)
+                transactionForCategory = null
+            }
+        )
+    }
+
+    transactionBeingEdited?.let { transaction ->
+        EditTransactionDialog(
+            transaction = transaction,
+            onDismiss = { transactionBeingEdited = null },
+            onSave = { type, amountMinor, merchant, note ->
+                onUpdateTransaction(transaction.id, type, amountMinor, merchant, note)
+                transactionBeingEdited = null
+            }
+        )
+    }
+
+    transactionPendingDeletion?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { transactionPendingDeletion = null },
+            title = {
+                Text(stringResource(R.string.delete_transaction_title))
+            },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_transaction_confirmation,
+                        transaction.merchant
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteTransaction(transaction.id)
+                        transactionPendingDeletion = null
+                    }
+                ) {
+                    Text(stringResource(R.string.delete_transaction))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { transactionPendingDeletion = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TransactionDetailsDialog(
+    transaction: TransactionEntity,
+    category: CategoryEntity?,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onAssignCategory: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val isIncome = transaction.type == TransactionType.INCOME.name
+    val amountColor = if (isIncome) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.tertiary
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.transaction_details))
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TransactionBadge(transaction = transaction, color = amountColor)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = transaction.merchant,
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = formatMoney(if (isIncome) transaction.amountMinor else -transaction.amountMinor),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = amountColor,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+                TransactionDetailRow(
+                    label = stringResource(R.string.date_label),
+                    value = formatDate(transaction.dateEpochDay)
+                )
+                TransactionDetailRow(
+                    label = stringResource(R.string.category),
+                    value = category?.let { categoryLabel(it) }
+                        ?: stringResource(R.string.no_category_assigned)
+                )
+                if (transaction.note.isNotBlank()) {
+                    TransactionDetailRow(
+                        label = stringResource(R.string.note),
+                        value = transaction.note
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(top = 2.dp))
+                OutlinedButton(
+                    onClick = onAssignCategory,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Category,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.change_category),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.delete),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEdit) {
+                Text(stringResource(R.string.edit_transaction))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun TransactionDetailRow(
+    label: String,
+    value: String
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
+private fun EditTransactionDialog(
+    transaction: TransactionEntity,
+    onDismiss: () -> Unit,
+    onSave: (TransactionType, Long, String, String) -> Unit
+) {
+    var selectedTypeName by rememberSaveable(transaction.id) {
+        mutableStateOf(transaction.type)
+    }
+    var amount by rememberSaveable(transaction.id) {
+        mutableStateOf(formatEditableAmount(transaction.amountMinor))
+    }
+    var merchant by rememberSaveable(transaction.id) {
+        mutableStateOf(transaction.merchant)
+    }
+    var note by rememberSaveable(transaction.id) {
+        mutableStateOf(transaction.note)
+    }
+    var errorMessageRes by rememberSaveable(transaction.id) {
+        mutableStateOf<Int?>(null)
+    }
+
+    val selectedType = TransactionType.valueOf(selectedTypeName)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.edit_transaction))
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TransactionTypeSelector(
+                    selectedType = selectedType,
+                    onTypeSelected = { selectedTypeName = it.name }
+                )
+
+                TextField(
+                    value = amount,
+                    onValueChange = {
+                        amount = it
+                        errorMessageRes = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.amount)) },
+                    placeholder = { Text(stringResource(R.string.amount_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = MaterialTheme.shapes.medium,
+                    colors = financeTextFieldColors()
+                )
+
+                TextField(
+                    value = merchant,
+                    onValueChange = {
+                        merchant = it
+                        errorMessageRes = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.merchant)) },
+                    placeholder = { Text(stringResource(R.string.merchant_hint)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    colors = financeTextFieldColors()
+                )
+
+                TextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.note)) },
+                    supportingText = { Text(stringResource(R.string.note_optional)) },
+                    minLines = 2,
+                    shape = MaterialTheme.shapes.medium,
+                    colors = financeTextFieldColors()
+                )
+
+                errorMessageRes?.let { messageRes ->
+                    Text(
+                        text = stringResource(messageRes),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val amountMinor = parseAmountToMinor(amount)
+                    errorMessageRes = when {
+                        amountMinor == null || amountMinor <= 0L -> R.string.invalid_amount
+                        merchant.isBlank() -> R.string.merchant_required
+                        else -> null
+                    }
+                    if (errorMessageRes == null && amountMinor != null) {
+                        onSave(selectedType, amountMinor, merchant, note)
+                    }
+                }
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
@@ -795,25 +1162,31 @@ private fun TransactionRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = transaction.merchant,
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = category?.let { categoryLabel(it) }
                         ?: stringResource(R.string.no_category_assigned),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = formatDate(transaction.dateEpochDay),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = amount,
                 style = MaterialTheme.typography.titleMedium,
-                color = amountColor
+                color = amountColor,
+                maxLines = 1
             )
         }
     }
@@ -839,39 +1212,110 @@ private fun CategoryAssignmentDialog(
             Text(stringResource(R.string.assign_category))
         },
         text = {
-            Column {
-                Text(
-                    text = transaction.merchant,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-                    items(categories, key = { it.id }) { category ->
-                        val parent = categories.firstOrNull { it.id == category.parentId }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedCategoryId = category.id }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedCategoryId == category.id,
-                                onClick = { selectedCategoryId = category.id }
+            val isIncome = transaction.type == TransactionType.INCOME.name
+            val amountColor = if (isIncome) {
+                MaterialTheme.colorScheme.secondary
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TransactionBadge(transaction = transaction, color = amountColor)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = transaction.merchant,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Column {
-                                Text(text = categoryLabel(category))
-                                if (parent != null) {
-                                    Text(
-                                        text = categoryLabel(parent),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Text(
+                                text = formatMoney(
+                                    if (isIncome) transaction.amountMinor else -transaction.amountMinor
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = amountColor,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.select_category),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 280.dp),
+                        contentPadding = PaddingValues(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(categories, key = { it.id }) { category ->
+                            val parent = categories.firstOrNull { it.id == category.parentId }
+                            val isSelected = selectedCategoryId == category.id
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedCategoryId = category.id },
+                                shape = MaterialTheme.shapes.small,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                                } else {
+                                    Color.Transparent
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { selectedCategoryId = category.id }
                                     )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = categoryLabel(category),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (parent != null) {
+                                            Text(
+                                                text = categoryLabel(parent),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -880,11 +1324,24 @@ private fun CategoryAssignmentDialog(
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = saveMerchantAsKeyword,
-                        onCheckedChange = { saveMerchantAsKeyword = it }
+                    Text(
+                        text = stringResource(R.string.remember_keyword),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                    Text(stringResource(R.string.remember_keyword))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = saveMerchantAsKeyword,
+                        onCheckedChange = { saveMerchantAsKeyword = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurface,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                        )
+                    )
                 }
             }
         },
@@ -1623,6 +2080,11 @@ private fun parseAmountToMinor(value: String): Long? = runCatching {
         .setScale(0, RoundingMode.HALF_UP)
         .longValueExact()
 }.getOrNull()
+
+private fun formatEditableAmount(amountMinor: Long): String =
+    BigDecimal.valueOf(amountMinor, 2)
+        .stripTrailingZeros()
+        .toPlainString()
 
 private fun formatMoney(amountMinor: Long): String {
     val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {

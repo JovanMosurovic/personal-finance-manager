@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -20,6 +21,12 @@ interface TransactionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: TransactionEntity): Long
+
+    @Update
+    suspend fun update(transaction: TransactionEntity)
+
+    @Query("DELETE FROM finance_transactions WHERE id = :transactionId")
+    suspend fun deleteById(transactionId: Long)
 
     @Query("UPDATE finance_transactions SET categoryId = :categoryId, matchedRuleId = NULL, isManuallyCategorized = 1 WHERE id = :transactionId")
     suspend fun assignCategory(transactionId: Long, categoryId: Long)
