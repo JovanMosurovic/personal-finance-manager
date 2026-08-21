@@ -28,7 +28,13 @@
     <string name="analytics_title">Analitika</string>
     <string name="analytics_placeholder">Grafikoni i poređenja će se pojaviti ovde.</string>
     <string name="net_this_month">Neto ovog meseca</string>
+    <string name="income_in_period">Prihodi u izabranom periodu</string>
+    <string name="expenses_in_period">Troškovi u izabranom periodu</string>
+    <string name="net_in_period">Neto u izabranom periodu</string>
     <string name="spending_by_category">Potrošnja po kategoriji</string>
+    <string name="analytics_period_7_days">Poslednjih 7 dana</string>
+    <string name="analytics_period_30_days">Poslednjih 30 dana</string>
+    <string name="analytics_period_this_month">Ovaj mesec</string>
 
     <string name="add_transaction">Dodaj transakciju</string>
     <string name="add_expense">Trošak</string>

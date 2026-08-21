@@ -27,7 +27,13 @@
     <string name="analytics_title">Analytics</string>
     <string name="analytics_placeholder">Charts and comparisons will appear here.</string>
     <string name="net_this_month">Net this month</string>
+    <string name="income_in_period">Income in selected period</string>
+    <string name="expenses_in_period">Expenses in selected period</string>
+    <string name="net_in_period">Net in selected period</string>
     <string name="spending_by_category">Spending by category</string>
+    <string name="analytics_period_7_days">Last 7 days</string>
+    <string name="analytics_period_30_days">Last 30 days</string>
+    <string name="analytics_period_this_month">This month</string>
 
     <string name="add_transaction">Add transaction</string>
     <string name="add_expense">Expense</string>

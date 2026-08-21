@@ -54,6 +54,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -108,6 +109,7 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 private enum class TopLevelDestination(
@@ -134,6 +136,14 @@ private enum class AppLanguage(
 ) {
     SERBIAN_LATIN("sr-Latn", R.string.language_serbian_latin),
     ENGLISH("en", R.string.language_english)
+}
+
+private enum class AnalyticsPeriod(
+    val labelRes: Int
+) {
+    LAST_7_DAYS(R.string.analytics_period_7_days),
+    LAST_30_DAYS(R.string.analytics_period_30_days),
+    THIS_MONTH(R.string.analytics_period_this_month)
 }
 
 @Composable
@@ -419,9 +429,10 @@ private data class SpendingPoint(
 private fun SpendingChart(
     transactions: List<TransactionEntity>,
     emptyLabel: String,
+    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS,
     modifier: Modifier = Modifier
 ) {
-    val points = weeklySpendingPoints(transactions)
+    val points = spendingPointsForPeriod(transactions, period)
     val maxAmount = points.maxOfOrNull { it.amountMinor } ?: 0L
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -452,7 +463,7 @@ private fun SpendingChart(
             val bottom = size.height - 8.dp.toPx()
             val top = 8.dp.toPx()
             val chartHeight = bottom - top
-            val gap = 7.dp.toPx()
+            val gap = if (points.size > 14) 3.dp.toPx() else 7.dp.toPx()
             val barWidth = (size.width - gap * (points.size - 1)) / points.size
 
             listOf(0f, 0.5f, 1f).forEach { progress ->
@@ -484,24 +495,42 @@ private fun SpendingChart(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(top = 4.dp)
         ) {
-            points.forEach { point ->
-                Text(
-                    text = chartDayLabel(point.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            val labelStep = when {
+                points.size <= 7 -> 1
+                points.size <= 14 -> 2
+                else -> 5
+            }
+            points.forEachIndexed { index, point ->
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (index == 0 || index == points.lastIndex || index % labelStep == 0) {
+                        Text(
+                            text = chartDayLabel(point.date, points.size > 7),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-private fun weeklySpendingPoints(transactions: List<TransactionEntity>): List<SpendingPoint> {
+private fun spendingPointsForPeriod(
+    transactions: List<TransactionEntity>,
+    period: AnalyticsPeriod
+): List<SpendingPoint> {
     val today = LocalDate.now()
-    return (6 downTo 0).map { daysAgo ->
-        val date = today.minusDays(daysAgo.toLong())
+    val startDate = period.startDate(today)
+    val dayCount = ChronoUnit.DAYS.between(startDate, today).toInt() + 1
+
+    return (0 until dayCount).map { dayOffset ->
+        val date = startDate.plusDays(dayOffset.toLong())
         SpendingPoint(
             date = date,
             amountMinor = transactions
@@ -515,12 +544,33 @@ private fun weeklySpendingPoints(transactions: List<TransactionEntity>): List<Sp
     }
 }
 
-private fun chartDayLabel(date: LocalDate): String =
+private fun chartDayLabel(date: LocalDate, useDate: Boolean): String = if (useDate) {
+    DateTimeFormatter.ofPattern("d.M.", Locale.getDefault()).format(date)
+} else {
     DateTimeFormatter.ofPattern("EEE", Locale.getDefault())
         .format(date)
         .replace(".", "")
         .take(3)
         .uppercase(Locale.getDefault())
+}
+
+private fun AnalyticsPeriod.startDate(today: LocalDate): LocalDate = when (this) {
+    AnalyticsPeriod.LAST_7_DAYS -> today.minusDays(6)
+    AnalyticsPeriod.LAST_30_DAYS -> today.minusDays(29)
+    AnalyticsPeriod.THIS_MONTH -> today.withDayOfMonth(1)
+}
+
+private fun transactionsInPeriod(
+    transactions: List<TransactionEntity>,
+    period: AnalyticsPeriod,
+    today: LocalDate = LocalDate.now()
+): List<TransactionEntity> {
+    val startEpochDay = period.startDate(today).toEpochDay()
+    val endEpochDay = today.toEpochDay()
+    return transactions.filter {
+        it.dateEpochDay in startEpochDay..endEpochDay
+    }
+}
 
 @Composable
 private fun RecentActivityCard(
@@ -1568,8 +1618,19 @@ private fun AnalyticsScreen(
     uiState: FinanceUiState,
     modifier: Modifier = Modifier
 ) {
-    val netThisMonth = uiState.incomeThisMonthMinor - uiState.expensesThisMonthMinor
-    val categorySpending = monthlyCategorySpending(uiState.transactions)
+    var selectedPeriodName by rememberSaveable {
+        mutableStateOf(AnalyticsPeriod.LAST_7_DAYS.name)
+    }
+    val selectedPeriod = AnalyticsPeriod.valueOf(selectedPeriodName)
+    val periodTransactions = transactionsInPeriod(uiState.transactions, selectedPeriod)
+    val incomeInPeriod = periodTransactions
+        .filter { it.type == TransactionType.INCOME.name }
+        .sumOf { it.amountMinor }
+    val expensesInPeriod = periodTransactions
+        .filter { it.type == TransactionType.EXPENSE.name }
+        .sumOf { it.amountMinor }
+    val netInPeriod = incomeInPeriod - expensesInPeriod
+    val categorySpending = categorySpendingForPeriod(periodTransactions)
     val maxCategorySpend = categorySpending.maxOfOrNull { it.amountMinor } ?: 0L
 
     Column(
@@ -1584,20 +1645,42 @@ private fun AnalyticsScreen(
             style = MaterialTheme.typography.headlineLarge
         )
 
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(end = 4.dp)
+        ) {
+            AnalyticsPeriod.entries.forEach { period ->
+                item(key = period.name) {
+                    FilterChip(
+                        selected = selectedPeriod == period,
+                        onClick = { selectedPeriodName = period.name },
+                        label = { Text(stringResource(period.labelRes)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MetricCard(
                 modifier = Modifier.weight(1f),
-                label = stringResource(R.string.income_this_month),
-                value = formatMoney(uiState.incomeThisMonthMinor),
+                label = stringResource(R.string.income_in_period),
+                value = formatMoney(incomeInPeriod),
                 accentColor = MaterialTheme.colorScheme.secondary
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
-                label = stringResource(R.string.expenses_this_month),
-                value = formatMoney(uiState.expensesThisMonthMinor),
+                label = stringResource(R.string.expenses_in_period),
+                value = formatMoney(expensesInPeriod),
                 accentColor = MaterialTheme.colorScheme.tertiary
             )
         }
@@ -1608,13 +1691,13 @@ private fun AnalyticsScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = stringResource(R.string.net_this_month),
+                    text = stringResource(R.string.net_in_period),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = formatMoney(netThisMonth),
+                    text = formatMoney(netInPeriod),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -1635,17 +1718,24 @@ private fun AnalyticsScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = stringResource(R.string.expense_chart_title),
+                        modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(selectedPeriod.labelRes),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 SpendingChart(
-                    transactions = uiState.transactions,
-                    emptyLabel = stringResource(R.string.analytics_placeholder)
+                    transactions = periodTransactions,
+                    emptyLabel = stringResource(R.string.analytics_placeholder),
+                    period = selectedPeriod
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = stringResource(R.string.transactions_count, uiState.transactions.size),
+                    text = stringResource(R.string.transactions_count, periodTransactions.size),
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -1724,16 +1814,12 @@ private data class CategorySpending(
     val amountMinor: Long
 )
 
-private fun monthlyCategorySpending(
+private fun categorySpendingForPeriod(
     transactions: List<TransactionEntity>
 ): List<CategorySpending> {
-    val monthStart = LocalDate.now().withDayOfMonth(1).toEpochDay()
     return transactions
         .asSequence()
-        .filter {
-            it.type == TransactionType.EXPENSE.name &&
-                it.dateEpochDay >= monthStart
-        }
+        .filter { it.type == TransactionType.EXPENSE.name }
         .groupBy { it.categoryId }
         .map { (categoryId, categoryTransactions) ->
             CategorySpending(
