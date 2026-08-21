@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lične finansije</string>
+
+    <string name="nav_dashboard">Početna</string>
+    <string name="nav_transactions">Transakcije</string>
+    <string name="nav_analytics">Analitika</string>
+    <string name="nav_categories">Kategorije</string>
+    <string name="nav_settings">Podešavanja</string>
+
+    <string name="dashboard_title">Početna</string>
+    <string name="dashboard_subtitle">Jasan pregled vaših ličnih finansija.</string>
+    <string name="balance_total">Ukupno stanje</string>
+    <string name="balance_placeholder">0 RSD</string>
+    <string name="income_this_month">Prihodi ovog meseca</string>
+    <string name="expenses_this_month">Troškovi ovog meseca</string>
+    <string name="expense_chart_title">Pregled potrošnje</string>
+    <string name="expense_chart_placeholder">Grafikon potrošnje će se pojaviti ovde.</string>
+
+    <string name="transactions_title">Transakcije</string>
+    <string name="transactions_empty">Još nema transakcija.</string>
+    <string name="transactions_empty_description">Dodajte prvi prihod ili trošak da biste počeli da pratite finansije.</string>
+
+    <string name="analytics_title">Analitika</string>
+    <string name="analytics_placeholder">Grafikoni i poređenja će se pojaviti ovde.</string>
+
+    <string name="add_transaction">Dodaj transakciju</string>
+    <string name="add_expense">Trošak</string>
+    <string name="add_income">Prihod</string>
+    <string name="amount">Iznos</string>
+    <string name="amount_hint">npr. 1250,50</string>
+    <string name="merchant">Prodavac ili izvor</string>
+    <string name="merchant_hint">npr. MAXI ili JetBrains</string>
+    <string name="note">Beleška</string>
+    <string name="note_optional">Opciono</string>
+    <string name="save">Sačuvaj</string>
+    <string name="cancel">Otkaži</string>
+    <string name="automatic_category_info">Kategorija će biti automatski određena pomoću vaših pravila za ključne reči.</string>
+    <string name="uncategorized">Nekategorisano</string>
+    <string name="uncategorized_count">Nekategorisano: %1$d</string>
+    <string name="no_uncategorized_transactions">Nema nekategorisanih transakcija.</string>
+    <string name="remember_keyword">Zapamti prodavca kao ključnu reč</string>
+    <string name="assign_category">Dodeli kategoriju</string>
+    <string name="invalid_amount">Unesite ispravan iznos veći od nule.</string>
+    <string name="merchant_required">Unesite prodavca ili izvor prihoda.</string>
+    <string name="transactions_count">Transakcije: %1$d</string>
+    <string name="category_label">Kategorija: %1$s</string>
+    <string name="no_category_assigned">Kategorija nije dodeljena</string>
+
+    <string name="categories_title">Kategorije i ključne reči</string>
+    <string name="categories_description">Upravljajte ključnim rečima koje se koriste za automatsko kategorizovanje transakcija.</string>
+    <string name="add_keyword">Dodaj ključnu reč</string>
+    <string name="keyword_dialog_title">Dodaj ključnu reč za %1$s</string>
+    <string name="keyword_hint">npr. NOVI PRODAVAC</string>
+    <string name="no_keywords">Još nema dodatih ključnih reči.</string>
+
+    <string name="settings_title">Podešavanja</string>
+    <string name="language_title">Jezik</string>
+    <string name="language_description">Izaberite jezik koji aplikacija koristi.</string>
+    <string name="language_serbian_latin">Srpski (latinica)</string>
+    <string name="language_english">Engleski</string>
+
+    <string name="category_food">Hrana</string>
+    <string name="category_groceries">Namirnice</string>
+    <string name="category_fast_food">Brza hrana</string>
+    <string name="category_delivery">Dostava</string>
+    <string name="category_kiosk">Kiosk</string>
+    <string name="category_utilities">Komunalne</string>
+    <string name="category_phone_internet">Telefon + Internet</string>
+    <string name="category_infostan">Infostan</string>
+    <string name="category_electricity">Struja</string>
+    <string name="category_car">Auto</string>
+    <string name="category_fuel">Gorivo</string>
+    <string name="category_parking">Parking</string>
+    <string name="category_registration">Registracija</string>
+    <string name="category_income">Prihodi</string>
+    <string name="category_salary">Plata</string>
+    <string name="category_personal">Lični</string>
+    <string name="category_drugstore">Drogerija</string>
+    <string name="category_pharmacy">Apoteka</string>
+    <string name="category_shopping">Kupovina</string>
+    <string name="category_clothing">Odeća</string>
+    <string name="category_online">Online</string>
+    <string name="category_electronics">Elektronika</string>
+    <string name="category_home">Home</string>
+    <string name="category_leisure">Slobodno vreme</string>
+    <string name="category_entertainment">Zabava</string>
+    <string name="category_subscriptions">Pretplate</string>
+</resources>

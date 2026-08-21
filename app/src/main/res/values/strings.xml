@@ -1,3 +1,88 @@
 <resources>
-    <string name="app_name">personal-finance-manager</string>
+    <string name="app_name">Personal Finance Manager</string>
+
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_transactions">Transactions</string>
+    <string name="nav_analytics">Analytics</string>
+    <string name="nav_categories">Categories</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="dashboard_title">Dashboard</string>
+    <string name="dashboard_subtitle">A clear view of your personal finances.</string>
+    <string name="balance_total">Total balance</string>
+    <string name="balance_placeholder">0 RSD</string>
+    <string name="income_this_month">Income this month</string>
+    <string name="expenses_this_month">Expenses this month</string>
+    <string name="expense_chart_title">Spending overview</string>
+    <string name="expense_chart_placeholder">Your spending chart will appear here.</string>
+
+    <string name="transactions_title">Transactions</string>
+    <string name="transactions_empty">No transactions yet.</string>
+    <string name="transactions_empty_description">Add your first income or expense to start tracking your finances.</string>
+
+    <string name="analytics_title">Analytics</string>
+    <string name="analytics_placeholder">Charts and comparisons will appear here.</string>
+
+    <string name="add_transaction">Add transaction</string>
+    <string name="add_expense">Expense</string>
+    <string name="add_income">Income</string>
+    <string name="amount">Amount</string>
+    <string name="amount_hint">e.g. 1250.50</string>
+    <string name="merchant">Merchant or source</string>
+    <string name="merchant_hint">e.g. MAXI or JetBrains</string>
+    <string name="note">Note</string>
+    <string name="note_optional">Optional</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="automatic_category_info">The category will be assigned automatically using your keyword rules.</string>
+    <string name="uncategorized">Uncategorized</string>
+    <string name="uncategorized_count">Uncategorized: %1$d</string>
+    <string name="no_uncategorized_transactions">There are no uncategorized transactions.</string>
+    <string name="remember_keyword">Remember merchant as a keyword</string>
+    <string name="assign_category">Assign category</string>
+    <string name="invalid_amount">Enter a valid amount greater than zero.</string>
+    <string name="merchant_required">Enter a merchant or source.</string>
+    <string name="transactions_count">Transactions: %1$d</string>
+    <string name="category_label">Category: %1$s</string>
+    <string name="no_category_assigned">No category assigned</string>
+
+    <string name="categories_title">Categories and keywords</string>
+    <string name="categories_description">Manage the keywords used to automatically categorize your transactions.</string>
+    <string name="add_keyword">Add keyword</string>
+    <string name="keyword_dialog_title">Add keyword to %1$s</string>
+    <string name="keyword_hint">e.g. NEW MERCHANT</string>
+    <string name="no_keywords">No keywords added yet.</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="language_title">Language</string>
+    <string name="language_description">Choose the language used by the app.</string>
+    <string name="language_serbian_latin">Serbian (Latin)</string>
+    <string name="language_english">English</string>
+
+    <string name="category_food">Food</string>
+    <string name="category_groceries">Groceries</string>
+    <string name="category_fast_food">Fast food</string>
+    <string name="category_delivery">Delivery</string>
+    <string name="category_kiosk">Kiosk</string>
+    <string name="category_utilities">Utilities</string>
+    <string name="category_phone_internet">Phone + Internet</string>
+    <string name="category_infostan">Infostan</string>
+    <string name="category_electricity">Electricity</string>
+    <string name="category_car">Car</string>
+    <string name="category_fuel">Fuel</string>
+    <string name="category_parking">Parking</string>
+    <string name="category_registration">Registration</string>
+    <string name="category_income">Income</string>
+    <string name="category_salary">Salary</string>
+    <string name="category_personal">Personal</string>
+    <string name="category_drugstore">Drugstore</string>
+    <string name="category_pharmacy">Pharmacy</string>
+    <string name="category_shopping">Shopping</string>
+    <string name="category_clothing">Clothing</string>
+    <string name="category_online">Online</string>
+    <string name="category_electronics">Electronics</string>
+    <string name="category_home">Home</string>
+    <string name="category_leisure">Leisure</string>
+    <string name="category_entertainment">Entertainment</string>
+    <string name="category_subscriptions">Subscriptions</string>
 </resources>
