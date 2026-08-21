@@ -75,6 +75,9 @@
     <string name="keyword_dialog_title">Dodaj ključnu reč za %1$s</string>
     <string name="keyword_hint">npr. NOVI PRODAVAC</string>
     <string name="no_keywords">Još nema dodatih ključnih reči.</string>
+    <string name="delete_keyword">Obriši ključnu reč</string>
+    <string name="delete_keyword_title">Obrisati ključnu reč?</string>
+    <string name="delete_keyword_confirmation">Da li ste sigurni da želite da obrišete %1$s? Odgovarajuće transakcije će biti ponovo proverene.</string>
 
     <string name="settings_title">Podešavanja</string>
     <string name="language_title">Jezik</string>

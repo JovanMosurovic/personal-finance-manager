@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Delete
@@ -101,6 +102,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jovanmosurovic.personalfinancemanager.FinanceApplication
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
+import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.math.BigDecimal
@@ -181,7 +183,9 @@ fun PersonalFinanceApp() {
                         )
                     ) {
                         NavigationBar(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 4.dp),
                             containerColor = Color.Transparent,
                             tonalElevation = 0.dp,
                             windowInsets = WindowInsets(0, 0, 0, 0)
@@ -203,7 +207,10 @@ fun PersonalFinanceApp() {
                                     label = {
                                         Text(
                                             text = stringResource(destination.labelRes),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontSize = 10.sp,
+                                                lineHeight = 14.sp
+                                            ),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -254,6 +261,7 @@ fun PersonalFinanceApp() {
                 TopLevelDestination.CATEGORIES.route -> CategoriesScreen(
                     uiState = uiState,
                     onAddKeyword = financeViewModel::addKeyword,
+                    onDeleteKeyword = financeViewModel::deleteKeyword,
                     modifier = Modifier.padding(innerPadding)
                 )
 
@@ -1417,9 +1425,11 @@ private fun CategoryAssignmentDialog(
 private fun CategoriesScreen(
     uiState: FinanceUiState,
     onAddKeyword: (Long, String) -> Unit,
+    onDeleteKeyword: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var categoryForKeyword by remember { mutableStateOf<CategoryEntity?>(null) }
+    var keywordPendingDeletion by remember { mutableStateOf<KeywordRuleEntity?>(null) }
     val topLevelCategories = uiState.categories.filter { it.parentId == null }
 
     Column(
@@ -1447,7 +1457,8 @@ private fun CategoriesScreen(
                 topLevelCategory = topLevelCategory,
                 children = children,
                 keywordRules = uiState.keywordRules,
-                onAddKeyword = { categoryForKeyword = it }
+                onAddKeyword = { categoryForKeyword = it },
+                onDeleteKeyword = { keywordPendingDeletion = it }
             )
         }
     }
@@ -1462,14 +1473,47 @@ private fun CategoriesScreen(
             }
         )
     }
+
+    keywordPendingDeletion?.let { rule ->
+        AlertDialog(
+            onDismissRequest = { keywordPendingDeletion = null },
+            title = {
+                Text(stringResource(R.string.delete_keyword_title))
+            },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_keyword_confirmation,
+                        rule.keyword
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteKeyword(rule.id)
+                        keywordPendingDeletion = null
+                    }
+                ) {
+                    Text(stringResource(R.string.delete_keyword))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { keywordPendingDeletion = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun CategoryGroup(
     topLevelCategory: CategoryEntity,
     children: List<CategoryEntity>,
-    keywordRules: List<com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity>,
-    onAddKeyword: (CategoryEntity) -> Unit
+    keywordRules: List<KeywordRuleEntity>,
+    onAddKeyword: (CategoryEntity) -> Unit,
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1498,13 +1542,14 @@ private fun CategoryGroup(
                 it.categoryId == topLevelCategory.id
             }
             if (topLevelKeywords.isNotEmpty()) {
-                KeywordChips(topLevelKeywords)
+                KeywordChips(topLevelKeywords, onDeleteKeyword)
             }
             children.forEach { category ->
                 CategoryKeywordRow(
                     category = category,
                     keywords = keywordRules.filter { it.categoryId == category.id },
-                    onAddKeyword = { onAddKeyword(category) }
+                    onAddKeyword = { onAddKeyword(category) },
+                    onDeleteKeyword = onDeleteKeyword
                 )
             }
         }
@@ -1531,8 +1576,9 @@ private fun CategoryBadge(category: CategoryEntity) {
 @Composable
 private fun CategoryKeywordRow(
     category: CategoryEntity,
-    keywords: List<com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity>,
-    onAddKeyword: () -> Unit
+    keywords: List<KeywordRuleEntity>,
+    onAddKeyword: () -> Unit,
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -1555,20 +1601,34 @@ private fun CategoryKeywordRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            KeywordChips(keywords)
+            KeywordChips(keywords, onDeleteKeyword)
         }
     }
 }
 
 @Composable
 private fun KeywordChips(
-    keywords: List<com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity>
+    keywords: List<KeywordRuleEntity>,
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(keywords, key = { it.id }) { rule ->
             AssistChip(
-                onClick = {},
-                label = { Text(rule.keyword) }
+                onClick = { onDeleteKeyword(rule) },
+                label = {
+                    Text(
+                        text = rule.keyword,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.delete_keyword),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             )
         }
     }

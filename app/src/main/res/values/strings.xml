@@ -74,6 +74,9 @@
     <string name="keyword_dialog_title">Add keyword to %1$s</string>
     <string name="keyword_hint">e.g. NEW MERCHANT</string>
     <string name="no_keywords">No keywords added yet.</string>
+    <string name="delete_keyword">Delete keyword</string>
+    <string name="delete_keyword_title">Delete keyword?</string>
+    <string name="delete_keyword_confirmation">Are you sure you want to delete %1$s? Matching transactions will be checked again.</string>
 
     <string name="settings_title">Settings</string>
     <string name="language_title">Language</string>

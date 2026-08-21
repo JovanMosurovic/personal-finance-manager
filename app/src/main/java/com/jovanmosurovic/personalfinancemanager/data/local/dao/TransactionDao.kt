@@ -19,6 +19,9 @@ interface TransactionDao {
     @Query("SELECT * FROM finance_transactions WHERE categoryId IS NULL")
     suspend fun getUncategorized(): List<TransactionEntity>
 
+    @Query("UPDATE finance_transactions SET categoryId = NULL, matchedRuleId = NULL WHERE matchedRuleId = :ruleId AND isManuallyCategorized = 0")
+    suspend fun clearAutomaticCategoryForRule(ruleId: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: TransactionEntity): Long
 

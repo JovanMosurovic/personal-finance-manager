@@ -115,6 +115,14 @@ class FinanceRepository(
         }
     }
 
+    suspend fun deleteKeyword(keywordRuleId: Long) {
+        database.withTransaction {
+            database.transactionDao().clearAutomaticCategoryForRule(keywordRuleId)
+            database.keywordRuleDao().deleteById(keywordRuleId)
+            reclassifyUncategorizedInternal()
+        }
+    }
+
     suspend fun assignCategory(
         transactionId: Long,
         categoryId: Long,

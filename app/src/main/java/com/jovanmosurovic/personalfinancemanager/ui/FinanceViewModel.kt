@@ -102,6 +102,12 @@ class FinanceViewModel(
         }
     }
 
+    fun deleteKeyword(keywordRuleId: Long) {
+        viewModelScope.launch {
+            repository.deleteKeyword(keywordRuleId)
+        }
+    }
+
     fun updateTransaction(
         transactionId: Long,
         type: TransactionType,

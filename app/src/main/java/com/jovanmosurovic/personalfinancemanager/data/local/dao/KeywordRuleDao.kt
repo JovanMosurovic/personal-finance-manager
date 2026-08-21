@@ -26,4 +26,7 @@ interface KeywordRuleDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(rule: KeywordRuleEntity)
+
+    @Query("DELETE FROM keyword_rules WHERE id = :ruleId")
+    suspend fun deleteById(ruleId: Long)
 }
