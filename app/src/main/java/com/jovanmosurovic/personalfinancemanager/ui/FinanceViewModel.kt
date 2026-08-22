@@ -135,6 +135,24 @@ class FinanceViewModel(
         }
     }
 
+    fun addCategory(name: String, parentId: Long?) {
+        viewModelScope.launch {
+            repository.addCategory(name, parentId)
+        }
+    }
+
+    fun renameCategory(categoryId: Long, name: String) {
+        viewModelScope.launch {
+            repository.renameCategory(categoryId, name)
+        }
+    }
+
+    fun deleteCategory(categoryId: Long) {
+        viewModelScope.launch {
+            repository.deleteCategory(categoryId)
+        }
+    }
+
     fun assignCategory(
         transactionId: Long,
         categoryId: Long,

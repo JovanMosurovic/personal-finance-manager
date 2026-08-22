@@ -110,6 +110,77 @@ class FinanceRepository(
         database.transactionDao().deleteById(transactionId)
     }
 
+    suspend fun addCategory(name: String, parentId: Long?) {
+        val cleanedName = name.trim()
+        if (cleanedName.isBlank()) return
+
+        database.withTransaction {
+            val categoryDao = database.categoryDao()
+            val parent = parentId?.let { categoryDao.getById(it) }
+            if (parentId != null && (parent == null || parent.parentId != null)) {
+                return@withTransaction
+            }
+
+            val alreadyExists = categoryDao.getAll().any { category ->
+                !category.isSystem &&
+                    category.parentId == parentId &&
+                    category.nameKey.equals(cleanedName, ignoreCase = true)
+            }
+            if (alreadyExists) return@withTransaction
+
+            categoryDao.insert(
+                CategoryEntity(
+                    id = categoryDao.nextId(),
+                    nameKey = cleanedName,
+                    parentId = parentId,
+                    isSystem = false
+                )
+            )
+        }
+    }
+
+    suspend fun renameCategory(categoryId: Long, name: String) {
+        val cleanedName = name.trim()
+        if (cleanedName.isBlank()) return
+
+        database.withTransaction {
+            val categoryDao = database.categoryDao()
+            val category = categoryDao.getById(categoryId)
+                ?: return@withTransaction
+            if (category.isSystem) return@withTransaction
+
+            val alreadyExists = categoryDao.getAll().any { otherCategory ->
+                otherCategory.id != categoryId &&
+                    !otherCategory.isSystem &&
+                    otherCategory.parentId == category.parentId &&
+                    otherCategory.nameKey.equals(cleanedName, ignoreCase = true)
+            }
+            if (alreadyExists) return@withTransaction
+
+            categoryDao.renameCustomCategory(categoryId, cleanedName)
+        }
+    }
+
+    suspend fun deleteCategory(categoryId: Long) {
+        database.withTransaction {
+            val categoryDao = database.categoryDao()
+            val category = categoryDao.getById(categoryId)
+                ?: return@withTransaction
+            if (category.isSystem) return@withTransaction
+
+            suspend fun deleteCategoryTree(currentCategoryId: Long) {
+                categoryDao.getChildren(currentCategoryId).forEach { child ->
+                    deleteCategoryTree(child.id)
+                }
+                database.transactionDao().clearCategoryAssignments(currentCategoryId)
+                categoryDao.deleteById(currentCategoryId)
+            }
+
+            deleteCategoryTree(categoryId)
+            reclassifyUncategorizedInternal()
+        }
+    }
+
     suspend fun addKeyword(categoryId: Long, keyword: String) {
         database.withTransaction {
             addKeywordInternal(categoryId, keyword)

@@ -71,6 +71,15 @@
 
     <string name="categories_title">Kategorije i ključne reči</string>
     <string name="categories_description">Upravljajte ključnim rečima koje se koriste za automatsko kategorizovanje transakcija.</string>
+    <string name="add_category">Dodaj kategoriju</string>
+    <string name="add_subcategory">Dodaj podkategoriju</string>
+    <string name="add_subcategory_title">Dodaj podkategoriju za %1$s</string>
+    <string name="edit_category">Izmeni kategoriju</string>
+    <string name="category_name">Naziv kategorije</string>
+    <string name="category_name_hint">npr. Putovanja</string>
+    <string name="delete_category">Obriši kategoriju</string>
+    <string name="delete_category_title">Obrisati kategoriju?</string>
+    <string name="delete_category_confirmation">Obrisati %1$s? Njene podkategorije i ključne reči biće uklonjene, a povezane transakcije postati nekategorisane.</string>
     <string name="add_keyword">Dodaj ključnu reč</string>
     <string name="keyword_dialog_title">Dodaj ključnu reč za %1$s</string>
     <string name="keyword_hint">npr. NOVI PRODAVAC</string>

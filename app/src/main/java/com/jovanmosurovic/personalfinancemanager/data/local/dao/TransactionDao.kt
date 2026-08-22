@@ -34,6 +34,9 @@ interface TransactionDao {
     @Query("UPDATE finance_transactions SET categoryId = :categoryId, matchedRuleId = NULL, isManuallyCategorized = 1 WHERE id = :transactionId")
     suspend fun assignCategory(transactionId: Long, categoryId: Long)
 
+    @Query("UPDATE finance_transactions SET categoryId = NULL, matchedRuleId = NULL, isManuallyCategorized = 0 WHERE categoryId = :categoryId")
+    suspend fun clearCategoryAssignments(categoryId: Long)
+
     @Query("UPDATE finance_transactions SET categoryId = :categoryId, matchedRuleId = :ruleId, isManuallyCategorized = 0 WHERE id = :transactionId")
     suspend fun applyAutomaticCategory(transactionId: Long, categoryId: Long, ruleId: Long)
 }

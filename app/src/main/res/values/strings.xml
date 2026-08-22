@@ -70,6 +70,15 @@
 
     <string name="categories_title">Categories and keywords</string>
     <string name="categories_description">Manage the keywords used to automatically categorize your transactions.</string>
+    <string name="add_category">Add category</string>
+    <string name="add_subcategory">Add subcategory</string>
+    <string name="add_subcategory_title">Add subcategory to %1$s</string>
+    <string name="edit_category">Edit category</string>
+    <string name="category_name">Category name</string>
+    <string name="category_name_hint">e.g. Travel</string>
+    <string name="delete_category">Delete category</string>
+    <string name="delete_category_title">Delete category?</string>
+    <string name="delete_category_confirmation">Delete %1$s? Its subcategories and keywords will be removed, and related transactions will become uncategorized.</string>
     <string name="add_keyword">Add keyword</string>
     <string name="keyword_dialog_title">Add keyword to %1$s</string>
     <string name="keyword_hint">e.g. NEW MERCHANT</string>

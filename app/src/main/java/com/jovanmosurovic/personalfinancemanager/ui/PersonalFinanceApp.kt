@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
@@ -281,6 +282,9 @@ fun PersonalFinanceApp() {
                     uiState = uiState,
                     onAddKeyword = financeViewModel::addKeyword,
                     onDeleteKeyword = financeViewModel::deleteKeyword,
+                    onAddCategory = financeViewModel::addCategory,
+                    onRenameCategory = financeViewModel::renameCategory,
+                    onDeleteCategory = financeViewModel::deleteCategory,
                     modifier = Modifier.padding(innerPadding)
                 )
 
@@ -1461,15 +1465,25 @@ private fun CategoryAssignmentDialog(
     )
 }
 
+private data class CategoryEditorState(
+    val category: CategoryEntity? = null,
+    val parentCategory: CategoryEntity? = null
+)
+
 @Composable
 private fun CategoriesScreen(
     uiState: FinanceUiState,
     onAddKeyword: (Long, String) -> Unit,
     onDeleteKeyword: (Long) -> Unit,
+    onAddCategory: (String, Long?) -> Unit,
+    onRenameCategory: (Long, String) -> Unit,
+    onDeleteCategory: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var categoryForKeyword by remember { mutableStateOf<CategoryEntity?>(null) }
     var keywordPendingDeletion by remember { mutableStateOf<KeywordRuleEntity?>(null) }
+    var categoryEditor by remember { mutableStateOf<CategoryEditorState?>(null) }
+    var categoryPendingDeletion by remember { mutableStateOf<CategoryEntity?>(null) }
     val topLevelCategories = uiState.categories.filter { it.parentId == null }
 
     Column(
@@ -1479,10 +1493,28 @@ private fun CategoriesScreen(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = stringResource(R.string.categories_title),
-            style = MaterialTheme.typography.headlineLarge
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.categories_title),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineLarge
+            )
+            Button(
+                onClick = { categoryEditor = CategoryEditorState() },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.add_category))
+            }
+        }
         Text(
             text = stringResource(R.string.categories_description),
             style = MaterialTheme.typography.bodyLarge,
@@ -1498,7 +1530,12 @@ private fun CategoriesScreen(
                 children = children,
                 keywordRules = uiState.keywordRules,
                 onAddKeyword = { categoryForKeyword = it },
-                onDeleteKeyword = { keywordPendingDeletion = it }
+                onDeleteKeyword = { keywordPendingDeletion = it },
+                onAddSubcategory = {
+                    categoryEditor = CategoryEditorState(parentCategory = it)
+                },
+                onEditCategory = { categoryEditor = CategoryEditorState(category = it) },
+                onDeleteCategory = { categoryPendingDeletion = it }
             )
         }
     }
@@ -1545,6 +1582,102 @@ private fun CategoriesScreen(
             }
         )
     }
+
+    categoryEditor?.let { editor ->
+        CategoryEditorDialog(
+            category = editor.category,
+            parentCategory = editor.parentCategory,
+            onDismiss = { categoryEditor = null },
+            onConfirm = { name ->
+                if (editor.category != null) {
+                    onRenameCategory(editor.category.id, name)
+                } else {
+                    onAddCategory(name, editor.parentCategory?.id)
+                }
+                categoryEditor = null
+            }
+        )
+    }
+
+    categoryPendingDeletion?.let { category ->
+        AlertDialog(
+            onDismissRequest = { categoryPendingDeletion = null },
+            title = {
+                Text(stringResource(R.string.delete_category_title))
+            },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_category_confirmation,
+                        categoryLabel(category)
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteCategory(category.id)
+                        categoryPendingDeletion = null
+                    }
+                ) {
+                    Text(stringResource(R.string.delete_category))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryPendingDeletion = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun CategoryEditorDialog(
+    category: CategoryEntity?,
+    parentCategory: CategoryEntity?,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var name by rememberSaveable(category?.id, parentCategory?.id) {
+        mutableStateOf(category?.nameKey.orEmpty())
+    }
+    val title = when {
+        category != null -> stringResource(R.string.edit_category)
+        parentCategory != null -> stringResource(
+            R.string.add_subcategory_title,
+            categoryLabel(parentCategory)
+        )
+        else -> stringResource(R.string.add_category)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.category_name)) },
+                placeholder = { Text(stringResource(R.string.category_name_hint)) },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name.trim()) },
+                enabled = name.trim().isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
@@ -1553,7 +1686,10 @@ private fun CategoryGroup(
     children: List<CategoryEntity>,
     keywordRules: List<KeywordRuleEntity>,
     onAddKeyword: (CategoryEntity) -> Unit,
-    onDeleteKeyword: (KeywordRuleEntity) -> Unit
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit,
+    onAddSubcategory: (CategoryEntity) -> Unit,
+    onEditCategory: (CategoryEntity) -> Unit,
+    onDeleteCategory: (CategoryEntity) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1574,8 +1710,30 @@ private fun CategoryGroup(
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge
                 )
+                if (!topLevelCategory.isSystem) {
+                    IconButton(onClick = { onEditCategory(topLevelCategory) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = stringResource(R.string.edit_category)
+                        )
+                    }
+                    IconButton(onClick = { onDeleteCategory(topLevelCategory) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = stringResource(R.string.delete_category)
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 TextButton(onClick = { onAddKeyword(topLevelCategory) }) {
                     Text(stringResource(R.string.add_keyword))
+                }
+                TextButton(onClick = { onAddSubcategory(topLevelCategory) }) {
+                    Text(stringResource(R.string.add_subcategory))
                 }
             }
             val topLevelKeywords = keywordRules.filter {
@@ -1589,7 +1747,9 @@ private fun CategoryGroup(
                     category = category,
                     keywords = keywordRules.filter { it.categoryId == category.id },
                     onAddKeyword = { onAddKeyword(category) },
-                    onDeleteKeyword = onDeleteKeyword
+                    onDeleteKeyword = onDeleteKeyword,
+                    onEditCategory = { onEditCategory(category) },
+                    onDeleteCategory = { onDeleteCategory(category) }
                 )
             }
         }
@@ -1618,7 +1778,9 @@ private fun CategoryKeywordRow(
     category: CategoryEntity,
     keywords: List<KeywordRuleEntity>,
     onAddKeyword: () -> Unit,
-    onDeleteKeyword: (KeywordRuleEntity) -> Unit
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit,
+    onEditCategory: () -> Unit,
+    onDeleteCategory: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -1632,6 +1794,20 @@ private fun CategoryKeywordRow(
             )
             TextButton(onClick = onAddKeyword) {
                 Text(stringResource(R.string.add_keyword))
+            }
+            if (!category.isSystem) {
+                IconButton(onClick = onEditCategory) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = stringResource(R.string.edit_category)
+                    )
+                }
+                IconButton(onClick = onDeleteCategory) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.delete_category)
+                    )
+                }
             }
         }
         if (keywords.isEmpty()) {
@@ -2343,7 +2519,11 @@ private fun LoadingScreen(modifier: Modifier = Modifier) {
 
 @Composable
 private fun categoryLabel(category: CategoryEntity): String =
-    stringResource(categoryLabelRes(category.nameKey))
+    if (category.isSystem) {
+        stringResource(categoryLabelRes(category.nameKey))
+    } else {
+        category.nameKey
+    }
 
 private fun categoryLabelRes(nameKey: String): Int = when (nameKey) {
     "category_food" -> R.string.category_food
