@@ -66,7 +66,8 @@ class FinanceRepository(
         type: TransactionType,
         amountMinor: Long,
         merchant: String,
-        note: String
+        note: String,
+        dateEpochDay: Long
     ) {
         database.withTransaction {
             val existingTransaction = database.transactionDao().getById(transactionId)
@@ -89,6 +90,7 @@ class FinanceRepository(
                     amountMinor = amountMinor,
                     merchant = cleanedMerchant,
                     note = note.trim(),
+                    dateEpochDay = dateEpochDay,
                     categoryId = if (existingTransaction.isManuallyCategorized) {
                         existingTransaction.categoryId
                     } else {

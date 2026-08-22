@@ -1,22 +1,28 @@
 package com.jovanmosurovic.personalfinancemanager.ui
 
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +44,7 @@ import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
@@ -53,7 +60,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -74,6 +84,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -108,7 +119,9 @@ import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.NumberFormat
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
@@ -237,8 +250,14 @@ fun PersonalFinanceApp() {
             AddTransactionScreen(
                 modifier = Modifier.padding(innerPadding),
                 onCancel = { showAddTransaction = false },
-                onSave = { type, amountMinor, merchant, note ->
-                    financeViewModel.addTransaction(type, amountMinor, merchant, note)
+                onSave = { type, amountMinor, merchant, note, dateEpochDay ->
+                    financeViewModel.addTransaction(
+                        type = type,
+                        amountMinor = amountMinor,
+                        merchant = merchant,
+                        note = note,
+                        dateEpochDay = dateEpochDay
+                    )
                     showAddTransaction = false
                 }
             )
@@ -694,7 +713,7 @@ private fun TransactionsScreen(
     uiState: FinanceUiState,
     onAddTransaction: () -> Unit,
     onAssignCategory: (Long, Long, Boolean) -> Unit,
-    onUpdateTransaction: (Long, TransactionType, Long, String, String) -> Unit,
+    onUpdateTransaction: (Long, TransactionType, Long, String, String, Long) -> Unit,
     onDeleteTransaction: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -835,8 +854,15 @@ private fun TransactionsScreen(
         EditTransactionDialog(
             transaction = transaction,
             onDismiss = { transactionBeingEdited = null },
-            onSave = { type, amountMinor, merchant, note ->
-                onUpdateTransaction(transaction.id, type, amountMinor, merchant, note)
+            onSave = { type, amountMinor, merchant, note, dateEpochDay ->
+                onUpdateTransaction(
+                    transaction.id,
+                    type,
+                    amountMinor,
+                    merchant,
+                    note,
+                    dateEpochDay
+                )
                 transactionBeingEdited = null
             }
         )
@@ -1046,7 +1072,7 @@ private fun TransactionDetailRow(
 private fun EditTransactionDialog(
     transaction: TransactionEntity,
     onDismiss: () -> Unit,
-    onSave: (TransactionType, Long, String, String) -> Unit
+    onSave: (TransactionType, Long, String, String, Long) -> Unit
 ) {
     var selectedTypeName by rememberSaveable(transaction.id) {
         mutableStateOf(transaction.type)
@@ -1059,6 +1085,9 @@ private fun EditTransactionDialog(
     }
     var note by rememberSaveable(transaction.id) {
         mutableStateOf(transaction.note)
+    }
+    var selectedDateEpochDay by rememberSaveable(transaction.id) {
+        mutableStateOf(transaction.dateEpochDay)
     }
     var errorMessageRes by rememberSaveable(transaction.id) {
         mutableStateOf<Int?>(null)
@@ -1112,6 +1141,11 @@ private fun EditTransactionDialog(
                     colors = financeTextFieldColors()
                 )
 
+                TransactionDateSelector(
+                    dateEpochDay = selectedDateEpochDay,
+                    onDateSelected = { selectedDateEpochDay = it }
+                )
+
                 TextField(
                     value = note,
                     onValueChange = { note = it },
@@ -1142,7 +1176,13 @@ private fun EditTransactionDialog(
                         else -> null
                     }
                     if (errorMessageRes == null && amountMinor != null) {
-                        onSave(selectedType, amountMinor, merchant, note)
+                        onSave(
+                            selectedType,
+                            amountMinor,
+                            merchant,
+                            note,
+                            selectedDateEpochDay
+                        )
                     }
                 }
             ) {
@@ -1893,13 +1933,14 @@ private fun categorySpendingForPeriod(
 @Composable
 private fun AddTransactionScreen(
     onCancel: () -> Unit,
-    onSave: (TransactionType, Long, String, String) -> Unit,
+    onSave: (TransactionType, Long, String, String, Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTypeName by rememberSaveable { mutableStateOf(TransactionType.EXPENSE.name) }
     var amount by rememberSaveable { mutableStateOf("") }
     var merchant by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
+    var selectedDateEpochDay by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
     var errorMessageRes by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val selectedType = TransactionType.valueOf(selectedTypeName)
@@ -1962,6 +2003,11 @@ private fun AddTransactionScreen(
             colors = financeTextFieldColors()
         )
 
+        TransactionDateSelector(
+            dateEpochDay = selectedDateEpochDay,
+            onDateSelected = { selectedDateEpochDay = it }
+        )
+
         TextField(
             value = note,
             onValueChange = { note = it },
@@ -2015,12 +2061,87 @@ private fun AddTransactionScreen(
                     else -> null
                 }
                 if (errorMessageRes == null && amountMinor != null) {
-                    onSave(selectedType, amountMinor, merchant, note)
+                    onSave(selectedType, amountMinor, merchant, note, selectedDateEpochDay)
                 }
             },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.save))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransactionDateSelector(
+    dateEpochDay: Long,
+    onDateSelected: (Long) -> Unit
+) {
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+
+    OutlinedButton(
+        onClick = { showDatePicker = true },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outline
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.DateRange,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.date_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = formatDate(dateEpochDay),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dateEpochDay.toDatePickerMillis()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis
+                            ?.datePickerMillisToEpochDay()
+                            ?.let(onDateSelected)
+                        showDatePicker = false
+                    }
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
@@ -2035,19 +2156,51 @@ private fun TransactionTypeSelector(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
-        Row(modifier = Modifier.padding(4.dp)) {
-            TransactionTypeOption(
-                label = stringResource(R.string.add_expense),
-                selected = selectedType == TransactionType.EXPENSE,
-                onClick = { onTypeSelected(TransactionType.EXPENSE) },
-                modifier = Modifier.weight(1f)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp)
+                .height(48.dp)
+        ) {
+            val itemWidth = maxWidth / 2
+            val indicatorOffset by androidx.compose.animation.core.animateDpAsState(
+                targetValue = if (selectedType == TransactionType.EXPENSE) {
+                    0.dp
+                } else {
+                    itemWidth
+                },
+                animationSpec = tween(
+                    durationMillis = 260,
+                    easing = FastOutSlowInEasing
+                ),
+                label = "transaction type indicator"
             )
-            TransactionTypeOption(
-                label = stringResource(R.string.add_income),
-                selected = selectedType == TransactionType.INCOME,
-                onClick = { onTypeSelected(TransactionType.INCOME) },
-                modifier = Modifier.weight(1f)
+
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset)
+                    .width(itemWidth)
+                    .fillMaxHeight()
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.small
+                    )
             )
+
+            Row(modifier = Modifier.fillMaxSize()) {
+                TransactionTypeOption(
+                    label = stringResource(R.string.add_expense),
+                    selected = selectedType == TransactionType.EXPENSE,
+                    onClick = { onTypeSelected(TransactionType.EXPENSE) },
+                    modifier = Modifier.weight(1f)
+                )
+                TransactionTypeOption(
+                    label = stringResource(R.string.add_income),
+                    selected = selectedType == TransactionType.INCOME,
+                    onClick = { onTypeSelected(TransactionType.INCOME) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
@@ -2059,26 +2212,28 @@ private fun TransactionTypeOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(durationMillis = 180),
+        label = "transaction type content color"
+    )
+
     Surface(
         modifier = modifier
             .clickable(onClick = onClick)
             .semantics { role = Role.RadioButton },
         shape = MaterialTheme.shapes.small,
-        color = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            Color.Transparent
-        },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
+        color = Color.Transparent,
+        contentColor = contentColor
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 11.dp),
+                .fillMaxHeight(),
             contentAlignment = Alignment.Center
         ) {
             Text(text = label, style = MaterialTheme.typography.titleMedium)
@@ -2244,6 +2399,18 @@ private fun formatDate(epochDay: Long): String =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
         .withLocale(Locale.getDefault())
         .format(LocalDate.ofEpochDay(epochDay))
+
+private fun Long.toDatePickerMillis(): Long =
+    LocalDate.ofEpochDay(this)
+        .atStartOfDay(ZoneOffset.UTC)
+        .toInstant()
+        .toEpochMilli()
+
+private fun Long.datePickerMillisToEpochDay(): Long =
+    Instant.ofEpochMilli(this)
+        .atZone(ZoneOffset.UTC)
+        .toLocalDate()
+        .toEpochDay()
 
 private fun currentAppLanguage(): AppLanguage {
     val applicationTag = AppCompatDelegate

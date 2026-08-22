@@ -83,7 +83,8 @@ class FinanceViewModel(
         type: TransactionType,
         amountMinor: Long,
         merchant: String,
-        note: String
+        note: String,
+        dateEpochDay: Long
     ) {
         viewModelScope.launch {
             repository.addTransaction(
@@ -91,7 +92,7 @@ class FinanceViewModel(
                 amountMinor = amountMinor,
                 merchant = merchant,
                 note = note,
-                dateEpochDay = LocalDate.now().toEpochDay()
+                dateEpochDay = dateEpochDay
             )
         }
     }
@@ -113,7 +114,8 @@ class FinanceViewModel(
         type: TransactionType,
         amountMinor: Long,
         merchant: String,
-        note: String
+        note: String,
+        dateEpochDay: Long
     ) {
         viewModelScope.launch {
             repository.updateTransaction(
@@ -121,7 +123,8 @@ class FinanceViewModel(
                 type = type,
                 amountMinor = amountMinor,
                 merchant = merchant,
-                note = note
+                note = note,
+                dateEpochDay = dateEpochDay
             )
         }
     }
