@@ -20,6 +20,11 @@
     <string name="chart_last_7_days">Poslednjih 7 dana</string>
     <string name="dashboard_recent_transactions">Nedavna aktivnost</string>
     <string name="view_all">Prikaži sve</string>
+    <string name="hide_amounts">Sakrij iznose</string>
+    <string name="show_amounts">Prikaži iznose</string>
+    <string name="privacy_title">Privatni režim</string>
+    <string name="privacy_description">Sakrijte stanja i iznose transakcija u celoj aplikaciji.</string>
+    <string name="amounts_hidden_chart">Potrošnja je sakrivena</string>
 
     <string name="transactions_title">Transakcije</string>
     <string name="search_transactions_hint">Pretražite prodavca ili belešku</string>

@@ -1,8 +1,10 @@
 package com.jovanmosurovic.personalfinancemanager.ui
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jovanmosurovic.personalfinancemanager.data.FinanceRepository
@@ -84,9 +86,17 @@ class FinanceViewModel @Inject constructor(
     application: Application,
     private val repository: FinanceRepository
 ) : AndroidViewModel(application) {
+    private val preferences = application.getSharedPreferences(
+        PREFERENCES_NAME,
+        Context.MODE_PRIVATE
+    )
     private val defaultsReady = MutableStateFlow(false)
     private val _importState = MutableStateFlow(ImportUiState())
+    private val _areAmountsHidden = MutableStateFlow(
+        preferences.getBoolean(KEY_HIDE_AMOUNTS, false)
+    )
     val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
+    val areAmountsHidden: StateFlow<Boolean> = _areAmountsHidden.asStateFlow()
     private val statementImporter = OtpStatementImporter()
 
     val uiState: StateFlow<FinanceUiState> = combine(
@@ -266,7 +276,17 @@ class FinanceViewModel @Inject constructor(
         }
     }
 
+    fun setAmountsHidden(hidden: Boolean) {
+        _areAmountsHidden.value = hidden
+        preferences.edit {
+            putBoolean(KEY_HIDE_AMOUNTS, hidden)
+        }
+    }
+
 }
+
+private const val PREFERENCES_NAME = "finance_preferences"
+private const val KEY_HIDE_AMOUNTS = "hide_amounts"
 
 private fun android.content.ContentResolver.queryDisplayName(uri: Uri): String? = query(
     uri,

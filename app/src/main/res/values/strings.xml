@@ -19,6 +19,11 @@
     <string name="chart_last_7_days">Last 7 days</string>
     <string name="dashboard_recent_transactions">Recent activity</string>
     <string name="view_all">View all</string>
+    <string name="hide_amounts">Hide amounts</string>
+    <string name="show_amounts">Show amounts</string>
+    <string name="privacy_title">Privacy mode</string>
+    <string name="privacy_description">Hide balances and transaction amounts across the app.</string>
+    <string name="amounts_hidden_chart">Spending is hidden</string>
 
     <string name="transactions_title">Transactions</string>
     <string name="search_transactions_hint">Search merchant or note</string>

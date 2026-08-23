@@ -55,6 +55,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Home
@@ -108,6 +110,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -122,7 +126,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -210,6 +214,7 @@ fun PersonalFinanceApp() {
     val financeViewModel: FinanceViewModel = hiltViewModel()
     val uiState by financeViewModel.uiState.collectAsStateWithLifecycle()
     val importState by financeViewModel.importState.collectAsStateWithLifecycle()
+    val areAmountsHidden by financeViewModel.areAmountsHidden.collectAsStateWithLifecycle()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val isAddTransactionRoute = currentRoute == ADD_TRANSACTION_ROUTE
@@ -302,6 +307,8 @@ fun PersonalFinanceApp() {
                 composable(TopLevelDestination.DASHBOARD.route) {
                     DashboardScreen(
                         uiState = uiState,
+                        areAmountsHidden = areAmountsHidden,
+                        onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
                         onViewTransactions = {
                             navController.navigate(TopLevelDestination.TRANSACTIONS.route) {
                                 launchSingleTop = true
@@ -312,6 +319,7 @@ fun PersonalFinanceApp() {
                 composable(TopLevelDestination.TRANSACTIONS.route) {
                     TransactionsScreen(
                         uiState = uiState,
+                        areAmountsHidden = areAmountsHidden,
                         onAddTransaction = {
                             navController.navigate(ADD_TRANSACTION_ROUTE)
                         },
@@ -321,7 +329,10 @@ fun PersonalFinanceApp() {
                     )
                 }
                 composable(TopLevelDestination.ANALYTICS.route) {
-                    AnalyticsScreen(uiState = uiState)
+                    AnalyticsScreen(
+                        uiState = uiState,
+                        areAmountsHidden = areAmountsHidden
+                    )
                 }
                 composable(TopLevelDestination.CATEGORIES.route) {
                     CategoriesScreen(
@@ -336,6 +347,8 @@ fun PersonalFinanceApp() {
                 composable(TopLevelDestination.SETTINGS.route) {
                     SettingsScreen(
                         importState = importState,
+                        areAmountsHidden = areAmountsHidden,
+                        onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
                         onImportFile = financeViewModel::importStatement,
                         onDismissImport = financeViewModel::clearImportState
                     )
@@ -363,6 +376,8 @@ fun PersonalFinanceApp() {
 @Composable
 private fun DashboardScreen(
     uiState: FinanceUiState,
+    areAmountsHidden: Boolean,
+    onAmountsVisibilityChanged: (Boolean) -> Unit,
     onViewTransactions: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -373,10 +388,35 @@ private fun DashboardScreen(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = stringResource(R.string.dashboard_title),
-            style = MaterialTheme.typography.headlineLarge
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.dashboard_title),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.headlineLarge
+            )
+            IconButton(
+                onClick = { onAmountsVisibilityChanged(!areAmountsHidden) }
+            ) {
+                Icon(
+                    imageVector = if (areAmountsHidden) {
+                        Icons.Outlined.VisibilityOff
+                    } else {
+                        Icons.Outlined.Visibility
+                    },
+                    contentDescription = stringResource(
+                        if (areAmountsHidden) {
+                            R.string.show_amounts
+                        } else {
+                            R.string.hide_amounts
+                        }
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         Text(
             text = stringResource(R.string.dashboard_subtitle),
             style = MaterialTheme.typography.bodyLarge,
@@ -400,6 +440,7 @@ private fun DashboardScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = formatMoney(uiState.totalBalanceMinor),
+                    modifier = Modifier.amountBlur(areAmountsHidden),
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -420,13 +461,15 @@ private fun DashboardScreen(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.income_this_month),
                 value = formatMoney(uiState.incomeThisMonthMinor),
-                accentColor = MaterialTheme.colorScheme.secondary
+                accentColor = MaterialTheme.colorScheme.secondary,
+                valueBlurred = areAmountsHidden
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.expenses_this_month),
                 value = formatMoney(uiState.expensesThisMonthMinor),
-                accentColor = MaterialTheme.colorScheme.tertiary
+                accentColor = MaterialTheme.colorScheme.tertiary,
+                valueBlurred = areAmountsHidden
             )
         }
 
@@ -456,7 +499,8 @@ private fun DashboardScreen(
                 Spacer(modifier = Modifier.height(12.dp))
                 SpendingChart(
                     transactions = uiState.transactions,
-                    emptyLabel = stringResource(R.string.expense_chart_placeholder)
+                    emptyLabel = stringResource(R.string.expense_chart_placeholder),
+                    areAmountsHidden = areAmountsHidden
                 )
             }
         }
@@ -464,6 +508,7 @@ private fun DashboardScreen(
         RecentActivityCard(
             transactions = uiState.transactions,
             categories = uiState.categories,
+            areAmountsHidden = areAmountsHidden,
             onViewAll = onViewTransactions
         )
     }
@@ -474,7 +519,8 @@ private fun MetricCard(
     label: String,
     value: String,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    valueBlurred: Boolean = false
 ) {
     Card(
         modifier = modifier,
@@ -502,7 +548,11 @@ private fun MetricCard(
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = value, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = value,
+                modifier = Modifier.amountBlur(valueBlurred),
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }
@@ -517,7 +567,8 @@ private fun SpendingChart(
     transactions: List<TransactionEntity>,
     emptyLabel: String,
     modifier: Modifier = Modifier,
-    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS
+    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS,
+    areAmountsHidden: Boolean = false
 ) {
     val points = spendingPointsForPeriod(transactions, period)
     val maxAmount = points.maxOfOrNull { it.amountMinor } ?: 0L
@@ -541,7 +592,34 @@ private fun SpendingChart(
         return
     }
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    if (areAmountsHidden) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(128.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Outlined.VisibilityOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.amounts_hidden_chart),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+    ) {
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -663,6 +741,7 @@ private fun transactionsInPeriod(
 private fun RecentActivityCard(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
+    areAmountsHidden: Boolean,
     onViewAll: () -> Unit
 ) {
     Card(
@@ -691,7 +770,8 @@ private fun RecentActivityCard(
                 transactions.take(3).forEachIndexed { index, transaction ->
                     CompactTransactionRow(
                         transaction = transaction,
-                        category = categories.firstOrNull { it.id == transaction.categoryId }
+                        category = categories.firstOrNull { it.id == transaction.categoryId },
+                        areAmountsHidden = areAmountsHidden
                     )
                     if (index < minOf(2, transactions.lastIndex)) {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
@@ -705,7 +785,8 @@ private fun RecentActivityCard(
 @Composable
 private fun CompactTransactionRow(
     transaction: TransactionEntity,
-    category: CategoryEntity?
+    category: CategoryEntity?,
+    areAmountsHidden: Boolean
 ) {
     val isIncome = transaction.type == TransactionType.INCOME.name
     val accentColor = if (isIncome) {
@@ -736,6 +817,7 @@ private fun CompactTransactionRow(
         }
         Text(
             text = formatMoney(if (isIncome) transaction.amountMinor else -transaction.amountMinor),
+            modifier = Modifier.amountBlur(areAmountsHidden),
             style = MaterialTheme.typography.titleMedium,
             color = accentColor,
             maxLines = 1
@@ -771,6 +853,7 @@ private fun TransactionBadge(
 @Composable
 private fun TransactionsScreen(
     uiState: FinanceUiState,
+    areAmountsHidden: Boolean,
     onAddTransaction: () -> Unit,
     onAssignCategory: (Long, Long, Boolean) -> Unit,
     onUpdateTransaction: (Long, TransactionType, Long, String, String, Long) -> Unit,
@@ -1076,6 +1159,7 @@ private fun TransactionsScreen(
                                 category = uiState.categories.firstOrNull {
                                     it.id == transaction.categoryId
                                 },
+                                areAmountsHidden = areAmountsHidden,
                                 onClick = { selectedTransaction = transaction }
                             )
                         }
@@ -1105,6 +1189,7 @@ private fun TransactionsScreen(
         TransactionDetailsDialog(
             transaction = transaction,
             category = uiState.categories.firstOrNull { it.id == transaction.categoryId },
+            areAmountsHidden = areAmountsHidden,
             onDismiss = { selectedTransaction = null },
             onEdit = {
                 transactionBeingEdited = transaction
@@ -1125,6 +1210,7 @@ private fun TransactionsScreen(
         CategoryAssignmentDialog(
             transaction = transaction,
             categories = uiState.categories,
+            areAmountsHidden = areAmountsHidden,
             onDismiss = { transactionForCategory = null },
             onConfirm = { categoryId, saveMerchantAsKeyword ->
                 onAssignCategory(transaction.id, categoryId, saveMerchantAsKeyword)
@@ -1436,6 +1522,7 @@ private fun sortTransactions(
 private fun TransactionDetailsDialog(
     transaction: TransactionEntity,
     category: CategoryEntity?,
+    areAmountsHidden: Boolean,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onAssignCategory: () -> Unit,
@@ -1481,7 +1568,10 @@ private fun TransactionDetailsDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = formatMoney(if (isIncome) transaction.amountMinor else -transaction.amountMinor),
+                                text = formatMoney(
+                                    if (isIncome) transaction.amountMinor else -transaction.amountMinor
+                                ),
+                                modifier = Modifier.amountBlur(areAmountsHidden),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = amountColor,
                                 maxLines = 1
@@ -1805,6 +1895,7 @@ private fun NoMatchingTransactionsContent(
 private fun TransactionRow(
     transaction: TransactionEntity,
     category: CategoryEntity?,
+    areAmountsHidden: Boolean,
     onClick: () -> Unit
 ) {
     val isIncome = transaction.type == TransactionType.INCOME.name
@@ -1854,6 +1945,7 @@ private fun TransactionRow(
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = amount,
+                modifier = Modifier.amountBlur(areAmountsHidden),
                 style = MaterialTheme.typography.titleMedium,
                 color = amountColor,
                 maxLines = 1
@@ -1866,6 +1958,7 @@ private fun TransactionRow(
 private fun CategoryAssignmentDialog(
     transaction: TransactionEntity,
     categories: List<CategoryEntity>,
+    areAmountsHidden: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (Long, Boolean) -> Unit
 ) {
@@ -1914,6 +2007,7 @@ private fun CategoryAssignmentDialog(
                                 text = formatMoney(
                                     if (isIncome) transaction.amountMinor else -transaction.amountMinor
                                 ),
+                                modifier = Modifier.amountBlur(areAmountsHidden),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = amountColor,
                                 maxLines = 1
@@ -2003,14 +2097,7 @@ private fun CategoryAssignmentDialog(
                     Switch(
                         checked = saveMerchantAsKeyword,
                         onCheckedChange = { saveMerchantAsKeyword = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedBorderColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurface,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            uncheckedBorderColor = MaterialTheme.colorScheme.outline
-                        )
+                        colors = financeSwitchColors()
                     )
                 }
             }
@@ -2529,6 +2616,7 @@ private fun AddKeywordDialog(
 @Composable
 private fun AnalyticsScreen(
     uiState: FinanceUiState,
+    areAmountsHidden: Boolean,
     modifier: Modifier = Modifier
 ) {
     var selectedPeriodName by rememberSaveable {
@@ -2588,13 +2676,15 @@ private fun AnalyticsScreen(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.income_in_period),
                 value = formatMoney(incomeInPeriod),
-                accentColor = MaterialTheme.colorScheme.secondary
+                accentColor = MaterialTheme.colorScheme.secondary,
+                valueBlurred = areAmountsHidden
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.expenses_in_period),
                 value = formatMoney(expensesInPeriod),
-                accentColor = MaterialTheme.colorScheme.tertiary
+                accentColor = MaterialTheme.colorScheme.tertiary,
+                valueBlurred = areAmountsHidden
             )
         }
 
@@ -2611,6 +2701,7 @@ private fun AnalyticsScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = formatMoney(netInPeriod),
+                    modifier = Modifier.amountBlur(areAmountsHidden),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -2644,7 +2735,8 @@ private fun AnalyticsScreen(
                 SpendingChart(
                     transactions = periodTransactions,
                     emptyLabel = stringResource(R.string.analytics_placeholder),
-                    period = selectedPeriod
+                    period = selectedPeriod,
+                    areAmountsHidden = areAmountsHidden
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -2667,6 +2759,12 @@ private fun AnalyticsScreen(
                 if (categorySpending.isEmpty()) {
                     Text(
                         text = stringResource(R.string.analytics_placeholder),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (areAmountsHidden) {
+                    Text(
+                        text = stringResource(R.string.amounts_hidden_chart),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -3072,8 +3170,20 @@ private fun financeTextFieldColors() = TextFieldDefaults.colors(
 )
 
 @Composable
+private fun financeSwitchColors() = SwitchDefaults.colors(
+    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+    checkedTrackColor = MaterialTheme.colorScheme.primary,
+    checkedBorderColor = MaterialTheme.colorScheme.primary,
+    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+    uncheckedBorderColor = MaterialTheme.colorScheme.outline
+)
+
+@Composable
 private fun SettingsScreen(
     importState: ImportUiState,
+    areAmountsHidden: Boolean,
+    onAmountsVisibilityChanged: (Boolean) -> Unit,
     onImportFile: (Uri) -> Unit,
     onDismissImport: () -> Unit,
     modifier: Modifier = Modifier
@@ -3128,6 +3238,50 @@ private fun SettingsScreen(
                         }
                     )
                 }
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.VisibilityOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.privacy_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = stringResource(R.string.privacy_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Switch(
+                    checked = areAmountsHidden,
+                    onCheckedChange = onAmountsVisibilityChanged,
+                    colors = financeSwitchColors()
+                )
             }
         }
         Card(
@@ -3333,6 +3487,9 @@ private fun formatEditableAmount(amountMinor: Long): String =
     BigDecimal.valueOf(amountMinor, 2)
         .stripTrailingZeros()
         .toPlainString()
+
+private fun Modifier.amountBlur(areAmountsHidden: Boolean): Modifier =
+    if (areAmountsHidden) blur(12.dp, BlurredEdgeTreatment.Unbounded) else this
 
 private fun formatMoney(amountMinor: Long): String {
     val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
