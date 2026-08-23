@@ -36,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
@@ -62,7 +64,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -78,6 +84,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -86,6 +93,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -106,6 +114,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
@@ -161,6 +170,30 @@ private enum class AnalyticsPeriod(
     LAST_30_DAYS(R.string.analytics_period_30_days),
     THIS_MONTH(R.string.analytics_period_this_month)
 }
+
+private enum class TransactionTypeFilter(val labelRes: Int) {
+    ALL(R.string.filter_type_all),
+    EXPENSE(R.string.add_expense),
+    INCOME(R.string.add_income)
+}
+
+private enum class TransactionDateFilter(val labelRes: Int) {
+    ALL_TIME(R.string.filter_period_all),
+    LAST_7_DAYS(R.string.analytics_period_7_days),
+    LAST_30_DAYS(R.string.analytics_period_30_days),
+    THIS_MONTH(R.string.analytics_period_this_month),
+    CUSTOM(R.string.filter_period_custom)
+}
+
+private enum class TransactionSort(val labelRes: Int) {
+    NEWEST(R.string.sort_newest),
+    OLDEST(R.string.sort_oldest),
+    HIGHEST_AMOUNT(R.string.sort_highest_amount),
+    LOWEST_AMOUNT(R.string.sort_lowest_amount)
+}
+
+private const val ALL_CATEGORIES_FILTER = Long.MIN_VALUE
+private const val UNCATEGORIZED_FILTER = 0L
 
 @Composable
 fun PersonalFinanceApp() {
@@ -460,8 +493,8 @@ private data class SpendingPoint(
 private fun SpendingChart(
     transactions: List<TransactionEntity>,
     emptyLabel: String,
-    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS
 ) {
     val points = spendingPointsForPeriod(transactions, period)
     val maxAmount = points.maxOfOrNull { it.amountMinor } ?: 0L
@@ -721,17 +754,70 @@ private fun TransactionsScreen(
     onDeleteTransaction: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showOnlyUncategorized by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable {
+        mutableStateOf("")
+    }
+    var selectedTypeFilterName by rememberSaveable {
+        mutableStateOf(TransactionTypeFilter.ALL.name)
+    }
+    var selectedCategoryId by rememberSaveable {
+        mutableStateOf(ALL_CATEGORIES_FILTER)
+    }
+    var selectedDateFilterName by rememberSaveable {
+        mutableStateOf(TransactionDateFilter.ALL_TIME.name)
+    }
+    var selectedSortName by rememberSaveable {
+        mutableStateOf(TransactionSort.NEWEST.name)
+    }
+    var customStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var customEndEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showCustomDatePicker by rememberSaveable { mutableStateOf(false) }
     var selectedTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionForCategory by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionBeingEdited by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionPendingDeletion by remember { mutableStateOf<TransactionEntity?>(null) }
-    val uncategorizedTransactions = uiState.transactions.filter { it.categoryId == null }
-    val visibleTransactions = if (showOnlyUncategorized) {
-        uncategorizedTransactions
-    } else {
-        uiState.transactions
+
+    val selectedTypeFilter = TransactionTypeFilter.entries.firstOrNull {
+        it.name == selectedTypeFilterName
+    } ?: TransactionTypeFilter.ALL
+    val selectedCategory = uiState.categories.firstOrNull {
+        it.id == selectedCategoryId
     }
+    val selectedDateFilter = TransactionDateFilter.entries.firstOrNull {
+        it.name == selectedDateFilterName
+    } ?: TransactionDateFilter.ALL_TIME
+    val selectedDateFilterLabel = if (
+        selectedDateFilter == TransactionDateFilter.CUSTOM &&
+        customStartEpochDay != null &&
+        customEndEpochDay != null
+    ) {
+        stringResource(
+            R.string.filter_period_custom_range,
+            formatDate(customStartEpochDay!!),
+            formatDate(customEndEpochDay!!)
+        )
+    } else {
+        stringResource(selectedDateFilter.labelRes)
+    }
+    val selectedSort = TransactionSort.entries.firstOrNull {
+        it.name == selectedSortName
+    } ?: TransactionSort.NEWEST
+    val uncategorizedTransactions = uiState.transactions.filter { it.categoryId == null }
+    val filteredTransactions = filterTransactions(
+        transactions = uiState.transactions,
+        searchQuery = searchQuery,
+        typeFilter = selectedTypeFilter,
+        categoryId = selectedCategoryId,
+        dateFilter = selectedDateFilter,
+        customStartEpochDay = customStartEpochDay,
+        customEndEpochDay = customEndEpochDay
+    )
+    val visibleTransactions = sortTransactions(filteredTransactions, selectedSort)
+    val hasActiveFilters = searchQuery.isNotBlank() ||
+        selectedTypeFilter != TransactionTypeFilter.ALL ||
+        selectedCategoryId != ALL_CATEGORIES_FILTER ||
+        selectedDateFilter != TransactionDateFilter.ALL_TIME ||
+        selectedSort != TransactionSort.NEWEST
 
     Scaffold(
         modifier = modifier,
@@ -755,51 +841,200 @@ private fun TransactionsScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom
+            ) {
                 Text(
                     text = stringResource(R.string.transactions_title),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.headlineLarge
                 )
                 Text(
-                    text = stringResource(R.string.transactions_count, uiState.transactions.size),
+                    text = stringResource(R.string.transactions_count, visibleTransactions.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(14.dp))
-            FilterChip(
-                selected = showOnlyUncategorized,
-                onClick = { showOnlyUncategorized = !showOnlyUncategorized },
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(stringResource(R.string.search_transactions_hint)) },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Outlined.FilterList,
+                        imageVector = Icons.Outlined.Search,
                         contentDescription = null
                     )
                 },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.uncategorized_count,
-                            uncategorizedTransactions.size
-                        )
-                    )
-                }
+                trailingIcon = if (searchQuery.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.clear_search)
+                            )
+                        }
+                    }
+                } else {
+                    null
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium
             )
             Spacer(modifier = Modifier.height(12.dp))
-            if (visibleTransactions.isEmpty() && showOnlyUncategorized) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Text(
-                        text = stringResource(R.string.no_uncategorized_transactions),
-                        modifier = Modifier.padding(20.dp),
-                        style = MaterialTheme.typography.bodyMedium
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 4.dp)
+            ) {
+                item {
+                    TransactionFilterMenuChip(
+                        label = stringResource(selectedTypeFilter.labelRes),
+                        icon = Icons.Outlined.FilterList,
+                        selected = selectedTypeFilter != TransactionTypeFilter.ALL,
+                        menuContent = { closeMenu ->
+                            TransactionTypeFilter.entries.forEach { filter ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(filter.labelRes)) },
+                                    onClick = {
+                                        selectedTypeFilterName = filter.name
+                                        closeMenu()
+                                    }
+                                )
+                            }
+                        }
                     )
                 }
+                item {
+                    TransactionFilterMenuChip(
+                        label = when {
+                            selectedCategoryId == ALL_CATEGORIES_FILTER -> {
+                                stringResource(R.string.filter_category_all)
+                            }
+                            selectedCategoryId == UNCATEGORIZED_FILTER -> {
+                                stringResource(
+                                    R.string.uncategorized_count,
+                                    uncategorizedTransactions.size
+                                )
+                            }
+                            selectedCategory != null -> categoryLabel(selectedCategory)
+                            else -> stringResource(R.string.filter_category_all)
+                        },
+                        icon = Icons.Outlined.Category,
+                        selected = selectedCategoryId != ALL_CATEGORIES_FILTER,
+                        menuContent = { closeMenu ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(stringResource(R.string.filter_category_all))
+                                },
+                                onClick = {
+                                    selectedCategoryId = ALL_CATEGORIES_FILTER
+                                    closeMenu()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.uncategorized_count,
+                                            uncategorizedTransactions.size
+                                        )
+                                    )
+                                },
+                                onClick = {
+                                    selectedCategoryId = UNCATEGORIZED_FILTER
+                                    closeMenu()
+                                }
+                            )
+                            uiState.categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                text = categoryLabel(category),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            category.parentId?.let { parentId ->
+                                                uiState.categories.firstOrNull {
+                                                    it.id == parentId
+                                                }?.let { parent ->
+                                                    Text(
+                                                        text = categoryLabel(parent),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedCategoryId = category.id
+                                        closeMenu()
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+                item {
+                    TransactionFilterMenuChip(
+                        label = selectedDateFilterLabel,
+                        icon = Icons.Outlined.DateRange,
+                        selected = selectedDateFilter != TransactionDateFilter.ALL_TIME,
+                        menuContent = { closeMenu ->
+                            TransactionDateFilter.entries.forEach { filter ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(filter.labelRes)) },
+                                    onClick = {
+                                        if (filter == TransactionDateFilter.CUSTOM) {
+                                            showCustomDatePicker = true
+                                        } else {
+                                            selectedDateFilterName = filter.name
+                                        }
+                                        closeMenu()
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+                item {
+                    TransactionFilterMenuChip(
+                        label = stringResource(selectedSort.labelRes),
+                        icon = Icons.AutoMirrored.Outlined.Sort,
+                        selected = selectedSort != TransactionSort.NEWEST,
+                        menuContent = { closeMenu ->
+                            TransactionSort.entries.forEach { sort ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(sort.labelRes)) },
+                                    onClick = {
+                                        selectedSortName = sort.name
+                                        closeMenu()
+                                    }
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            if (visibleTransactions.isEmpty() && uiState.transactions.isNotEmpty()) {
+                NoMatchingTransactionsContent(
+                    showClearAction = hasActiveFilters,
+                    onClear = {
+                        searchQuery = ""
+                        selectedTypeFilterName = TransactionTypeFilter.ALL.name
+                        selectedCategoryId = ALL_CATEGORIES_FILTER
+                        selectedDateFilterName = TransactionDateFilter.ALL_TIME.name
+                        customStartEpochDay = null
+                        customEndEpochDay = null
+                        showCustomDatePicker = false
+                        selectedSortName = TransactionSort.NEWEST.name
+                    }
+                )
             } else if (visibleTransactions.isEmpty()) {
                 EmptyTransactionsContent()
             } else {
@@ -903,6 +1138,254 @@ private fun TransactionsScreen(
             }
         )
     }
+
+    if (showCustomDatePicker) {
+        CustomTransactionDateRangeDialog(
+            initialStartEpochDay = customStartEpochDay,
+            initialEndEpochDay = customEndEpochDay,
+            onDismiss = { showCustomDatePicker = false },
+            onConfirm = { startEpochDay, endEpochDay ->
+                customStartEpochDay = minOf(startEpochDay, endEpochDay)
+                customEndEpochDay = maxOf(startEpochDay, endEpochDay)
+                selectedDateFilterName = TransactionDateFilter.CUSTOM.name
+                showCustomDatePicker = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun TransactionFilterMenuChip(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    menuContent: @Composable (closeMenu: () -> Unit) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        FilterChip(
+            selected = selected,
+            onClick = { expanded = true },
+            leadingIcon = {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null
+                )
+            },
+            label = {
+                Text(
+                    text = label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            menuContent { expanded = false }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomTransactionDateRangeDialog(
+    initialStartEpochDay: Long?,
+    initialEndEpochDay: Long?,
+    onDismiss: () -> Unit,
+    onConfirm: (startEpochDay: Long, endEpochDay: Long) -> Unit
+) {
+    val dateRangePickerState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = initialStartEpochDay?.toDatePickerMillis(),
+        initialSelectedEndDateMillis = initialEndEpochDay?.toDatePickerMillis()
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            val startEpochDay = dateRangePickerState.selectedStartDateMillis
+                ?.datePickerMillisToEpochDay()
+            val endEpochDay = dateRangePickerState.selectedEndDateMillis
+                ?.datePickerMillisToEpochDay()
+
+            TextButton(
+                enabled = startEpochDay != null && endEpochDay != null,
+                onClick = {
+                    if (startEpochDay != null && endEpochDay != null) {
+                        onConfirm(startEpochDay, endEpochDay)
+                    }
+                }
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    ) {
+        val startDateText = dateRangePickerState.selectedStartDateMillis
+            ?.datePickerMillisToEpochDay()
+            ?.let(::formatDate)
+            ?: stringResource(R.string.date_range_not_selected)
+        val endDateText = dateRangePickerState.selectedEndDateMillis
+            ?.datePickerMillisToEpochDay()
+            ?.let(::formatDate)
+            ?: stringResource(R.string.date_range_not_selected)
+
+        DateRangePicker(
+            state = dateRangePickerState,
+            title = {
+                Text(
+                    text = stringResource(R.string.select_date_range),
+                    modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp)
+                )
+            },
+            headline = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    DateRangeSelectionCard(
+                        label = stringResource(R.string.date_range_start),
+                        value = startDateText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DateRangeSelectionCard(
+                        label = stringResource(R.string.date_range_end),
+                        value = endDateText,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            },
+            showModeToggle = false,
+            colors = DatePickerDefaults.colors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                headlineContentColor = MaterialTheme.colorScheme.onSurface,
+                weekdayContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                subheadContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                navigationContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                dayContentColor = MaterialTheme.colorScheme.onSurface,
+                selectedDayContentColor = MaterialTheme.colorScheme.onPrimary,
+                selectedDayContainerColor = MaterialTheme.colorScheme.primary,
+                todayContentColor = MaterialTheme.colorScheme.primary,
+                todayDateBorderColor = MaterialTheme.colorScheme.primary,
+                dayInSelectionRangeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                dayInSelectionRangeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                dividerColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+            )
+        )
+    }
+}
+
+@Composable
+private fun DateRangeSelectionCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+private fun filterTransactions(
+    transactions: List<TransactionEntity>,
+    searchQuery: String,
+    typeFilter: TransactionTypeFilter,
+    categoryId: Long,
+    dateFilter: TransactionDateFilter,
+    customStartEpochDay: Long?,
+    customEndEpochDay: Long?,
+    today: LocalDate = LocalDate.now()
+): List<TransactionEntity> {
+    val normalizedQuery = searchQuery.trim()
+    val todayEpochDay = today.toEpochDay()
+
+    return transactions.filter { transaction ->
+        val matchesSearch = normalizedQuery.isBlank() ||
+            transaction.merchant.contains(normalizedQuery, ignoreCase = true) ||
+            transaction.note.contains(normalizedQuery, ignoreCase = true)
+
+        val matchesType = when (typeFilter) {
+            TransactionTypeFilter.ALL -> true
+            TransactionTypeFilter.EXPENSE -> transaction.type == TransactionType.EXPENSE.name
+            TransactionTypeFilter.INCOME -> transaction.type == TransactionType.INCOME.name
+        }
+
+        val matchesCategory = when (categoryId) {
+            ALL_CATEGORIES_FILTER -> true
+            UNCATEGORIZED_FILTER -> transaction.categoryId == null
+            else -> transaction.categoryId == categoryId
+        }
+
+        val matchesDate = when (dateFilter) {
+            TransactionDateFilter.ALL_TIME -> true
+            TransactionDateFilter.LAST_7_DAYS -> transaction.dateEpochDay in
+                today.minusDays(6).toEpochDay()..todayEpochDay
+            TransactionDateFilter.LAST_30_DAYS -> transaction.dateEpochDay in
+                today.minusDays(29).toEpochDay()..todayEpochDay
+            TransactionDateFilter.THIS_MONTH -> transaction.dateEpochDay in
+                today.withDayOfMonth(1).toEpochDay()..todayEpochDay
+            TransactionDateFilter.CUSTOM -> {
+                customStartEpochDay != null &&
+                    customEndEpochDay != null &&
+                    transaction.dateEpochDay in customStartEpochDay..customEndEpochDay
+            }
+        }
+
+        matchesSearch && matchesType && matchesCategory && matchesDate
+    }
+}
+
+private fun sortTransactions(
+    transactions: List<TransactionEntity>,
+    sort: TransactionSort
+): List<TransactionEntity> = when (sort) {
+    TransactionSort.NEWEST -> transactions.sortedWith(
+        compareByDescending<TransactionEntity> { it.dateEpochDay }
+            .thenByDescending { it.id }
+    )
+    TransactionSort.OLDEST -> transactions.sortedWith(
+        compareBy<TransactionEntity> { it.dateEpochDay }
+            .thenBy { it.id }
+    )
+    TransactionSort.HIGHEST_AMOUNT -> transactions.sortedWith(
+        compareByDescending<TransactionEntity> { it.amountMinor }
+            .thenByDescending { it.dateEpochDay }
+            .thenByDescending { it.id }
+    )
+    TransactionSort.LOWEST_AMOUNT -> transactions.sortedWith(
+        compareBy<TransactionEntity> { it.amountMinor }
+            .thenByDescending { it.dateEpochDay }
+            .thenByDescending { it.id }
+    )
 }
 
 @Composable
@@ -1234,6 +1717,47 @@ private fun EmptyTransactionsContent() {
 }
 
 @Composable
+private fun NoMatchingTransactionsContent(
+    showClearAction: Boolean,
+    onClear: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = stringResource(R.string.no_matching_transactions),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.no_matching_transactions_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (showClearAction) {
+                Spacer(modifier = Modifier.height(12.dp))
+                TextButton(onClick = onClear) {
+                    Text(stringResource(R.string.clear_filters))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TransactionRow(
     transaction: TransactionEntity,
     category: CategoryEntity?,
@@ -1486,57 +2010,69 @@ private fun CategoriesScreen(
     var categoryPendingDeletion by remember { mutableStateOf<CategoryEntity?>(null) }
     val topLevelCategories = uiState.categories.filter { it.parentId == null }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
                 text = stringResource(R.string.categories_title),
-                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.headlineLarge
             )
-            Button(
-                onClick = { categoryEditor = CategoryEditorState() },
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+
+            Text(
+                text = stringResource(R.string.categories_description),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            topLevelCategories.forEach { topLevelCategory ->
+                val children = uiState.categories.filter {
+                    it.parentId == topLevelCategory.id
+                }
+                CategoryGroup(
+                    topLevelCategory = topLevelCategory,
+                    children = children,
+                    keywordRules = uiState.keywordRules,
+                    onAddKeyword = { categoryForKeyword = it },
+                    onDeleteKeyword = { keywordPendingDeletion = it },
+                    onAddSubcategory = {
+                        categoryEditor = CategoryEditorState(parentCategory = it)
+                    },
+                    onEditCategory = { categoryEditor = CategoryEditorState(category = it) },
+                    onDeleteCategory = { categoryPendingDeletion = it }
+                )
+            }
+        }
+
+        SmallFloatingActionButton(
+            onClick = { categoryEditor = CategoryEditorState() },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 28.dp, bottom = 16.dp),
+            shape = MaterialTheme.shapes.large,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Add,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.add_category),
                     modifier = Modifier.size(18.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(stringResource(R.string.add_category))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.add_category),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1
+                )
             }
-        }
-        Text(
-            text = stringResource(R.string.categories_description),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        topLevelCategories.forEach { topLevelCategory ->
-            val children = uiState.categories.filter {
-                it.parentId == topLevelCategory.id
-            }
-            CategoryGroup(
-                topLevelCategory = topLevelCategory,
-                children = children,
-                keywordRules = uiState.keywordRules,
-                onAddKeyword = { categoryForKeyword = it },
-                onDeleteKeyword = { keywordPendingDeletion = it },
-                onAddSubcategory = {
-                    categoryEditor = CategoryEditorState(parentCategory = it)
-                },
-                onEditCategory = { categoryEditor = CategoryEditorState(category = it) },
-                onDeleteCategory = { categoryPendingDeletion = it }
-            )
         }
     }
 
@@ -1765,7 +2301,7 @@ private fun CategoryBadge(category: CategoryEntity) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
-                text = categoryLabel(category).take(1).uppercase(Locale.getDefault()),
+                text = categoryLabel(category).take(1).uppercase(),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -2354,7 +2890,12 @@ private fun TransactionTypeSelector(
 
             Box(
                 modifier = Modifier
-                    .offset(x = indicatorOffset)
+                    .offset {
+                        IntOffset(
+                            x = indicatorOffset.roundToPx(),
+                            y = 0
+                        )
+                    }
                     .width(itemWidth)
                     .fillMaxHeight()
                     .background(

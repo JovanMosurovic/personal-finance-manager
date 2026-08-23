@@ -22,6 +22,24 @@
     <string name="view_all">Prikaži sve</string>
 
     <string name="transactions_title">Transakcije</string>
+    <string name="search_transactions_hint">Pretražite prodavca ili belešku</string>
+    <string name="clear_search">Obriši pretragu</string>
+    <string name="filter_type_all">Svi tipovi</string>
+    <string name="filter_category_all">Sve kategorije</string>
+    <string name="filter_period_all">Svi datumi</string>
+    <string name="filter_period_custom">Prilagođeno</string>
+    <string name="filter_period_custom_range">%1$s – %2$s</string>
+    <string name="select_date_range">Izaberite period</string>
+    <string name="date_range_start">Početak</string>
+    <string name="date_range_end">Kraj</string>
+    <string name="date_range_not_selected">Nije izabrano</string>
+    <string name="sort_newest">Najnovije prvo</string>
+    <string name="sort_oldest">Najstarije prvo</string>
+    <string name="sort_highest_amount">Najveći iznos</string>
+    <string name="sort_lowest_amount">Najmanji iznos</string>
+    <string name="no_matching_transactions">Nema odgovarajućih transakcija</string>
+    <string name="no_matching_transactions_description">Pokušajte sa drugačijom pretragom ili filterima.</string>
+    <string name="clear_filters">Obriši filtere</string>
     <string name="transactions_empty">Još nema transakcija.</string>
     <string name="transactions_empty_description">Dodajte prvi prihod ili trošak da biste počeli da pratite finansije.</string>
 

@@ -21,6 +21,24 @@
     <string name="view_all">View all</string>
 
     <string name="transactions_title">Transactions</string>
+    <string name="search_transactions_hint">Search merchant or note</string>
+    <string name="clear_search">Clear search</string>
+    <string name="filter_type_all">All types</string>
+    <string name="filter_category_all">All categories</string>
+    <string name="filter_period_all">All time</string>
+    <string name="filter_period_custom">Custom</string>
+    <string name="filter_period_custom_range">%1$s – %2$s</string>
+    <string name="select_date_range">Select date range</string>
+    <string name="date_range_start">Start</string>
+    <string name="date_range_end">End</string>
+    <string name="date_range_not_selected">Not selected</string>
+    <string name="sort_newest">Newest first</string>
+    <string name="sort_oldest">Oldest first</string>
+    <string name="sort_highest_amount">Highest amount</string>
+    <string name="sort_lowest_amount">Lowest amount</string>
+    <string name="no_matching_transactions">No matching transactions</string>
+    <string name="no_matching_transactions_description">Try changing the search or filters.</string>
+    <string name="clear_filters">Clear filters</string>
     <string name="transactions_empty">No transactions yet.</string>
     <string name="transactions_empty_description">Add your first income or expense to start tracking your finances.</string>
 
