@@ -1,20 +1,30 @@
 package com.jovanmosurovic.personalfinancemanager.ui
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import android.app.Application
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jovanmosurovic.personalfinancemanager.data.FinanceRepository
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
+import com.jovanmosurovic.personalfinancemanager.data.importer.OtpImportFormat
+import com.jovanmosurovic.personalfinancemanager.data.importer.OtpStatementImportException
+import com.jovanmosurovic.personalfinancemanager.data.importer.OtpStatementImporter
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import javax.inject.Inject
 
 data class FinanceUiState(
     val transactions: List<TransactionEntity> = emptyList(),
@@ -46,13 +56,38 @@ data class FinanceUiState(
             val today = LocalDate.now()
             val firstDayOfMonth = today.withDayOfMonth(1).toEpochDay()
             return transactions.filter { it.dateEpochDay >= firstDayOfMonth }
-        }
+    }
 }
 
-class FinanceViewModel(
+enum class ImportError {
+    UNSUPPORTED_FILE,
+    INVALID_FILE,
+    NO_TRANSACTIONS,
+    READ_FAILED
+}
+
+data class ImportSummary(
+    val format: OtpImportFormat,
+    val parsedCount: Int,
+    val importedCount: Int,
+    val duplicateCount: Int
+)
+
+data class ImportUiState(
+    val isImporting: Boolean = false,
+    val summary: ImportSummary? = null,
+    val error: ImportError? = null
+)
+
+@HiltViewModel
+class FinanceViewModel @Inject constructor(
+    application: Application,
     private val repository: FinanceRepository
-) : ViewModel() {
+) : AndroidViewModel(application) {
     private val defaultsReady = MutableStateFlow(false)
+    private val _importState = MutableStateFlow(ImportUiState())
+    val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
+    private val statementImporter = OtpStatementImporter()
 
     val uiState: StateFlow<FinanceUiState> = combine(
         repository.observeTransactions(),
@@ -167,15 +202,82 @@ class FinanceViewModel(
         }
     }
 
-    class Factory(
-        private val repository: FinanceRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(FinanceViewModel::class.java)) {
-                return FinanceViewModel(repository) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+    fun importStatement(uri: Uri) {
+        if (_importState.value.isImporting) return
+
+        val applicationContext = getApplication<Application>()
+        val contentResolver = applicationContext.contentResolver
+        val format = OtpImportFormat.from(
+            mimeType = contentResolver.getType(uri),
+            fileName = contentResolver.queryDisplayName(uri) ?: uri.lastPathSegment
+        )
+        if (format == null) {
+            _importState.value = ImportUiState(error = ImportError.UNSUPPORTED_FILE)
+            return
         }
+
+        viewModelScope.launch {
+            _importState.value = ImportUiState(isImporting = true)
+            try {
+                val parsedTransactions = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        statementImporter.parse(
+                            format = format,
+                            input = input,
+                            context = applicationContext
+                        )
+                    } ?: throw OtpStatementImportException(
+                        reason = OtpStatementImportException.Reason.INVALID_FILE
+                    )
+                }
+
+                if (parsedTransactions.isEmpty()) {
+                    _importState.value = ImportUiState(error = ImportError.NO_TRANSACTIONS)
+                    return@launch
+                }
+
+                val insertResult = withContext(Dispatchers.IO) {
+                    repository.importTransactions(parsedTransactions)
+                }
+                _importState.value = ImportUiState(
+                    summary = ImportSummary(
+                        format = format,
+                        parsedCount = parsedTransactions.size,
+                        importedCount = insertResult.importedCount,
+                        duplicateCount = insertResult.duplicateCount
+                    )
+                )
+            } catch (exception: OtpStatementImportException) {
+                _importState.value = ImportUiState(
+                    error = when (exception.reason) {
+                        OtpStatementImportException.Reason.INVALID_FILE -> ImportError.INVALID_FILE
+                        OtpStatementImportException.Reason.NO_TRANSACTIONS -> ImportError.NO_TRANSACTIONS
+                    }
+                )
+            } catch (_: Exception) {
+                _importState.value = ImportUiState(error = ImportError.READ_FAILED)
+            }
+        }
+    }
+
+    fun clearImportState() {
+        if (!_importState.value.isImporting) {
+            _importState.value = ImportUiState()
+        }
+    }
+
+}
+
+private fun android.content.ContentResolver.queryDisplayName(uri: Uri): String? = query(
+    uri,
+    arrayOf(OpenableColumns.DISPLAY_NAME),
+    null,
+    null,
+    null
+)?.use { cursor ->
+    if (cursor.moveToFirst()) {
+        cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+    } else {
+        null
     }
 }

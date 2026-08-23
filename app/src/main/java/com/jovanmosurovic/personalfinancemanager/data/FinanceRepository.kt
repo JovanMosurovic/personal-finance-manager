@@ -5,6 +5,7 @@ import com.jovanmosurovic.personalfinancemanager.data.local.FinanceDatabase
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
+import com.jovanmosurovic.personalfinancemanager.data.importer.OtpParsedTransaction
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import kotlinx.coroutines.flow.Flow
 import java.util.Locale
@@ -108,6 +109,53 @@ class FinanceRepository(
 
     suspend fun deleteTransaction(transactionId: Long) {
         database.transactionDao().deleteById(transactionId)
+    }
+
+    suspend fun importTransactions(transactions: List<OtpParsedTransaction>): ImportInsertResult {
+        var importedCount = 0
+        var duplicateCount = 0
+
+        database.withTransaction {
+            val transactionDao = database.transactionDao()
+            val existingKeys = transactionDao.getAll()
+                .mapTo(mutableSetOf()) { it.importKey() }
+            val rules = database.keywordRuleDao().getActiveRules()
+
+            transactions.forEach { importedTransaction ->
+                val transaction = TransactionEntity(
+                    type = importedTransaction.type.name,
+                    amountMinor = importedTransaction.amountMinor,
+                    merchant = importedTransaction.merchant,
+                    note = importedTransaction.note,
+                    dateEpochDay = importedTransaction.dateEpochDay,
+                    categoryId = null,
+                    matchedRuleId = null,
+                    isManuallyCategorized = false
+                )
+
+                if (!existingKeys.add(transaction.importKey())) {
+                    duplicateCount++
+                    return@forEach
+                }
+
+                val matchedRule = rules.firstOrNull { rule ->
+                    ruleAppliesToTransaction(rule, importedTransaction.type) &&
+                        keywordMatches(rule, importedTransaction.merchant.normalizeForMatching())
+                }
+                transactionDao.insert(
+                    transaction.copy(
+                        categoryId = matchedRule?.categoryId,
+                        matchedRuleId = matchedRule?.id
+                    )
+                )
+                importedCount++
+            }
+        }
+
+        return ImportInsertResult(
+            importedCount = importedCount,
+            duplicateCount = duplicateCount
+        )
     }
 
     suspend fun addCategory(name: String, parentId: Long?) {
@@ -269,6 +317,19 @@ class FinanceRepository(
         }
     }
 }
+
+data class ImportInsertResult(
+    val importedCount: Int,
+    val duplicateCount: Int
+)
+
+private fun TransactionEntity.importKey(): String = listOf(
+    type,
+    amountMinor,
+    dateEpochDay,
+    merchant.normalizeForMatching(),
+    note.normalizeForMatching()
+).joinToString("|")
 
 private fun String.normalizeForMatching(): String = uppercase(Locale.ROOT)
     .replace('Č', 'C')

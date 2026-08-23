@@ -1,5 +1,8 @@
 package com.jovanmosurovic.personalfinancemanager.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -105,9 +108,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -118,13 +122,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.os.LocaleListCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.jovanmosurovic.personalfinancemanager.FinanceApplication
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
+import com.jovanmosurovic.personalfinancemanager.data.importer.OtpImportFormat
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -194,25 +202,22 @@ private enum class TransactionSort(val labelRes: Int) {
 
 private const val ALL_CATEGORIES_FILTER = Long.MIN_VALUE
 private const val UNCATEGORIZED_FILTER = 0L
+private const val ADD_TRANSACTION_ROUTE = "add_transaction"
 
 @Composable
 fun PersonalFinanceApp() {
-    val context = LocalContext.current
-    val application = context.applicationContext as FinanceApplication
-    val financeViewModel: FinanceViewModel = viewModel(
-        factory = FinanceViewModel.Factory(application.repository)
-    )
+    val navController = rememberNavController()
+    val financeViewModel: FinanceViewModel = hiltViewModel()
     val uiState by financeViewModel.uiState.collectAsStateWithLifecycle()
-
-    var selectedRoute by rememberSaveable {
-        mutableStateOf(TopLevelDestination.DASHBOARD.route)
-    }
-    var showAddTransaction by rememberSaveable { mutableStateOf(false) }
+    val importState by financeViewModel.importState.collectAsStateWithLifecycle()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = currentBackStackEntry?.destination?.route
+    val isAddTransactionRoute = currentRoute == ADD_TRANSACTION_ROUTE
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (!showAddTransaction) {
+            if (!isAddTransactionRoute) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -239,11 +244,19 @@ fun PersonalFinanceApp() {
                         ) {
                             TopLevelDestination.entries.forEach { destination ->
                                 NavigationBarItem(
-                                    selected = selectedRoute == destination.route,
-                                    onClick = { selectedRoute = destination.route },
+                                    selected = currentRoute == destination.route,
+                                    onClick = {
+                                        navController.navigate(destination.route) {
+                                            popUpTo(TopLevelDestination.DASHBOARD.route) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
                                     icon = {
                                         Icon(
-                                            imageVector = if (selectedRoute == destination.route) {
+                                            imageVector = if (currentRoute == destination.route) {
                                                 destination.selectedIcon
                                             } else {
                                                 destination.icon
@@ -280,58 +293,68 @@ fun PersonalFinanceApp() {
     ) { innerPadding ->
         if (!uiState.isReady) {
             LoadingScreen(modifier = Modifier.padding(innerPadding))
-        } else if (showAddTransaction) {
-            AddTransactionScreen(
-                modifier = Modifier.padding(innerPadding),
-                onCancel = { showAddTransaction = false },
-                onSave = { type, amountMinor, merchant, note, dateEpochDay ->
-                    financeViewModel.addTransaction(
-                        type = type,
-                        amountMinor = amountMinor,
-                        merchant = merchant,
-                        note = note,
-                        dateEpochDay = dateEpochDay
-                    )
-                    showAddTransaction = false
-                }
-            )
         } else {
-            when (selectedRoute) {
-                TopLevelDestination.TRANSACTIONS.route -> TransactionsScreen(
-                    uiState = uiState,
-                    onAddTransaction = { showAddTransaction = true },
-                    onAssignCategory = financeViewModel::assignCategory,
-                    onUpdateTransaction = financeViewModel::updateTransaction,
-                    onDeleteTransaction = financeViewModel::deleteTransaction,
-                    modifier = Modifier.padding(innerPadding)
-                )
-
-                TopLevelDestination.ANALYTICS.route -> AnalyticsScreen(
-                    uiState = uiState,
-                    modifier = Modifier.padding(innerPadding)
-                )
-
-                TopLevelDestination.CATEGORIES.route -> CategoriesScreen(
-                    uiState = uiState,
-                    onAddKeyword = financeViewModel::addKeyword,
-                    onDeleteKeyword = financeViewModel::deleteKeyword,
-                    onAddCategory = financeViewModel::addCategory,
-                    onRenameCategory = financeViewModel::renameCategory,
-                    onDeleteCategory = financeViewModel::deleteCategory,
-                    modifier = Modifier.padding(innerPadding)
-                )
-
-                TopLevelDestination.SETTINGS.route -> SettingsScreen(
-                    modifier = Modifier.padding(innerPadding)
-                )
-
-                else -> DashboardScreen(
-                    uiState = uiState,
-                    onViewTransactions = {
-                        selectedRoute = TopLevelDestination.TRANSACTIONS.route
-                    },
-                    modifier = Modifier.padding(innerPadding)
-                )
+            NavHost(
+                navController = navController,
+                startDestination = TopLevelDestination.DASHBOARD.route,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(TopLevelDestination.DASHBOARD.route) {
+                    DashboardScreen(
+                        uiState = uiState,
+                        onViewTransactions = {
+                            navController.navigate(TopLevelDestination.TRANSACTIONS.route) {
+                                launchSingleTop = true
+                            }
+                        }
+                    )
+                }
+                composable(TopLevelDestination.TRANSACTIONS.route) {
+                    TransactionsScreen(
+                        uiState = uiState,
+                        onAddTransaction = {
+                            navController.navigate(ADD_TRANSACTION_ROUTE)
+                        },
+                        onAssignCategory = financeViewModel::assignCategory,
+                        onUpdateTransaction = financeViewModel::updateTransaction,
+                        onDeleteTransaction = financeViewModel::deleteTransaction
+                    )
+                }
+                composable(TopLevelDestination.ANALYTICS.route) {
+                    AnalyticsScreen(uiState = uiState)
+                }
+                composable(TopLevelDestination.CATEGORIES.route) {
+                    CategoriesScreen(
+                        uiState = uiState,
+                        onAddKeyword = financeViewModel::addKeyword,
+                        onDeleteKeyword = financeViewModel::deleteKeyword,
+                        onAddCategory = financeViewModel::addCategory,
+                        onRenameCategory = financeViewModel::renameCategory,
+                        onDeleteCategory = financeViewModel::deleteCategory
+                    )
+                }
+                composable(TopLevelDestination.SETTINGS.route) {
+                    SettingsScreen(
+                        importState = importState,
+                        onImportFile = financeViewModel::importStatement,
+                        onDismissImport = financeViewModel::clearImportState
+                    )
+                }
+                composable(ADD_TRANSACTION_ROUTE) {
+                    AddTransactionScreen(
+                        onCancel = { navController.popBackStack() },
+                        onSave = { type, amountMinor, merchant, note, dateEpochDay ->
+                            financeViewModel.addTransaction(
+                                type = type,
+                                amountMinor = amountMinor,
+                                merchant = merchant,
+                                note = note,
+                                dateEpochDay = dateEpochDay
+                            )
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
         }
     }
@@ -822,6 +845,9 @@ private fun TransactionsScreen(
     Scaffold(
         modifier = modifier,
         containerColor = Color.Transparent,
+        // The app-level Scaffold already accounts for the system and bottom navigation insets.
+        // Applying them again here leaves an unnecessary gap above the bottom navigation bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddTransaction,
@@ -835,225 +861,243 @@ private fun TransactionsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.transactions_title),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.headlineLarge
-                )
-                Text(
-                    text = stringResource(R.string.transactions_count, visibleTransactions.size),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.search_transactions_hint)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Text(
+                        text = stringResource(R.string.transactions_title),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.headlineLarge
                     )
-                },
-                trailingIcon = if (searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = stringResource(R.string.clear_search)
-                            )
-                        }
-                    }
-                } else {
-                    null
-                },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(end = 4.dp)
-            ) {
-                item {
-                    TransactionFilterMenuChip(
-                        label = stringResource(selectedTypeFilter.labelRes),
-                        icon = Icons.Outlined.FilterList,
-                        selected = selectedTypeFilter != TransactionTypeFilter.ALL,
-                        menuContent = { closeMenu ->
-                            TransactionTypeFilter.entries.forEach { filter ->
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(filter.labelRes)) },
-                                    onClick = {
-                                        selectedTypeFilterName = filter.name
-                                        closeMenu()
-                                    }
-                                )
-                            }
-                        }
+                    Text(
+                        text = stringResource(R.string.transactions_count, visibleTransactions.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item {
-                    TransactionFilterMenuChip(
-                        label = when {
-                            selectedCategoryId == ALL_CATEGORIES_FILTER -> {
-                                stringResource(R.string.filter_category_all)
-                            }
-                            selectedCategoryId == UNCATEGORIZED_FILTER -> {
-                                stringResource(
-                                    R.string.uncategorized_count,
-                                    uncategorizedTransactions.size
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(stringResource(R.string.search_transactions_hint)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = null
+                        )
+                    },
+                    trailingIcon = if (searchQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.clear_search)
                                 )
                             }
-                            selectedCategory != null -> categoryLabel(selectedCategory)
-                            else -> stringResource(R.string.filter_category_all)
-                        },
-                        icon = Icons.Outlined.Category,
-                        selected = selectedCategoryId != ALL_CATEGORIES_FILTER,
-                        menuContent = { closeMenu ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(stringResource(R.string.filter_category_all))
-                                },
-                                onClick = {
-                                    selectedCategoryId = ALL_CATEGORIES_FILTER
-                                    closeMenu()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        stringResource(
-                                            R.string.uncategorized_count,
-                                            uncategorizedTransactions.size
-                                        )
+                        }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 4.dp)
+                ) {
+                    item {
+                        TransactionFilterMenuChip(
+                            label = stringResource(selectedTypeFilter.labelRes),
+                            icon = Icons.Outlined.FilterList,
+                            selected = selectedTypeFilter != TransactionTypeFilter.ALL,
+                            menuContent = { closeMenu ->
+                                TransactionTypeFilter.entries.forEach { filter ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(filter.labelRes)) },
+                                        onClick = {
+                                            selectedTypeFilterName = filter.name
+                                            closeMenu()
+                                        }
                                     )
-                                },
-                                onClick = {
-                                    selectedCategoryId = UNCATEGORIZED_FILTER
-                                    closeMenu()
                                 }
-                            )
-                            uiState.categories.forEach { category ->
+                            }
+                        )
+                    }
+                    item {
+                        TransactionFilterMenuChip(
+                            label = when {
+                                selectedCategoryId == ALL_CATEGORIES_FILTER -> {
+                                    stringResource(R.string.filter_category_all)
+                                }
+                                selectedCategoryId == UNCATEGORIZED_FILTER -> {
+                                    stringResource(
+                                        R.string.uncategorized_count,
+                                        uncategorizedTransactions.size
+                                    )
+                                }
+                                selectedCategory != null -> categoryLabel(selectedCategory)
+                                else -> stringResource(R.string.filter_category_all)
+                            },
+                            icon = Icons.Outlined.Category,
+                            selected = selectedCategoryId != ALL_CATEGORIES_FILTER,
+                            menuContent = { closeMenu ->
                                 DropdownMenuItem(
                                     text = {
-                                        Column {
-                                            Text(
-                                                text = categoryLabel(category),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            category.parentId?.let { parentId ->
-                                                uiState.categories.firstOrNull {
-                                                    it.id == parentId
-                                                }?.let { parent ->
-                                                    Text(
-                                                        text = categoryLabel(parent),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        Text(stringResource(R.string.filter_category_all))
                                     },
                                     onClick = {
-                                        selectedCategoryId = category.id
+                                        selectedCategoryId = ALL_CATEGORIES_FILTER
                                         closeMenu()
                                     }
                                 )
-                            }
-                        }
-                    )
-                }
-                item {
-                    TransactionFilterMenuChip(
-                        label = selectedDateFilterLabel,
-                        icon = Icons.Outlined.DateRange,
-                        selected = selectedDateFilter != TransactionDateFilter.ALL_TIME,
-                        menuContent = { closeMenu ->
-                            TransactionDateFilter.entries.forEach { filter ->
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(filter.labelRes)) },
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                R.string.uncategorized_count,
+                                                uncategorizedTransactions.size
+                                            )
+                                        )
+                                    },
                                     onClick = {
-                                        if (filter == TransactionDateFilter.CUSTOM) {
-                                            showCustomDatePicker = true
-                                        } else {
-                                            selectedDateFilterName = filter.name
+                                        selectedCategoryId = UNCATEGORIZED_FILTER
+                                        closeMenu()
+                                    }
+                                )
+                                uiState.categories.forEach { category ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    text = categoryLabel(category),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                category.parentId?.let { parentId ->
+                                                    uiState.categories.firstOrNull {
+                                                        it.id == parentId
+                                                    }?.let { parent ->
+                                                        Text(
+                                                            text = categoryLabel(parent),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedCategoryId = category.id
+                                            closeMenu()
                                         }
-                                        closeMenu()
-                                    }
-                                )
+                                    )
+                                }
                             }
-                        }
-                    )
-                }
-                item {
-                    TransactionFilterMenuChip(
-                        label = stringResource(selectedSort.labelRes),
-                        icon = Icons.AutoMirrored.Outlined.Sort,
-                        selected = selectedSort != TransactionSort.NEWEST,
-                        menuContent = { closeMenu ->
-                            TransactionSort.entries.forEach { sort ->
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(sort.labelRes)) },
-                                    onClick = {
-                                        selectedSortName = sort.name
-                                        closeMenu()
-                                    }
-                                )
-                            }
-                        }
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            if (visibleTransactions.isEmpty() && uiState.transactions.isNotEmpty()) {
-                NoMatchingTransactionsContent(
-                    showClearAction = hasActiveFilters,
-                    onClear = {
-                        searchQuery = ""
-                        selectedTypeFilterName = TransactionTypeFilter.ALL.name
-                        selectedCategoryId = ALL_CATEGORIES_FILTER
-                        selectedDateFilterName = TransactionDateFilter.ALL_TIME.name
-                        customStartEpochDay = null
-                        customEndEpochDay = null
-                        showCustomDatePicker = false
-                        selectedSortName = TransactionSort.NEWEST.name
+                        )
                     }
-                )
-            } else if (visibleTransactions.isEmpty()) {
-                EmptyTransactionsContent()
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(visibleTransactions, key = { it.id }) { transaction ->
-                        TransactionRow(
-                            transaction = transaction,
-                            category = uiState.categories.firstOrNull {
-                                it.id == transaction.categoryId
-                            },
-                            onClick = { selectedTransaction = transaction }
+                    item {
+                        TransactionFilterMenuChip(
+                            label = selectedDateFilterLabel,
+                            icon = Icons.Outlined.DateRange,
+                            selected = selectedDateFilter != TransactionDateFilter.ALL_TIME,
+                            menuContent = { closeMenu ->
+                                TransactionDateFilter.entries.forEach { filter ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(filter.labelRes)) },
+                                        onClick = {
+                                            if (filter == TransactionDateFilter.CUSTOM) {
+                                                showCustomDatePicker = true
+                                            } else {
+                                                selectedDateFilterName = filter.name
+                                            }
+                                            closeMenu()
+                                        }
+                                    )
+                                }
+                            }
+                        )
+                    }
+                    item {
+                        TransactionFilterMenuChip(
+                            label = stringResource(selectedSort.labelRes),
+                            icon = Icons.AutoMirrored.Outlined.Sort,
+                            selected = selectedSort != TransactionSort.NEWEST,
+                            menuContent = { closeMenu ->
+                                TransactionSort.entries.forEach { sort ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(sort.labelRes)) },
+                                        onClick = {
+                                            selectedSortName = sort.name
+                                            closeMenu()
+                                        }
+                                    )
+                                }
+                            }
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                if (visibleTransactions.isEmpty() && uiState.transactions.isNotEmpty()) {
+                    NoMatchingTransactionsContent(
+                        showClearAction = hasActiveFilters,
+                        onClear = {
+                            searchQuery = ""
+                            selectedTypeFilterName = TransactionTypeFilter.ALL.name
+                            selectedCategoryId = ALL_CATEGORIES_FILTER
+                            selectedDateFilterName = TransactionDateFilter.ALL_TIME.name
+                            customStartEpochDay = null
+                            customEndEpochDay = null
+                            showCustomDatePicker = false
+                            selectedSortName = TransactionSort.NEWEST.name
+                        }
+                    )
+                } else if (visibleTransactions.isEmpty()) {
+                    EmptyTransactionsContent()
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(visibleTransactions, key = { it.id }) { transaction ->
+                            TransactionRow(
+                                transaction = transaction,
+                                category = uiState.categories.firstOrNull {
+                                    it.id == transaction.categoryId
+                                },
+                                onClick = { selectedTransaction = transaction }
+                            )
+                        }
+                    }
+                }
             }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(112.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                MaterialTheme.colorScheme.background.copy(alpha = 0.86f),
+                                MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+            )
         }
     }
 
@@ -2015,7 +2059,7 @@ private fun CategoriesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 100.dp),
+                .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 132.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
@@ -2047,6 +2091,22 @@ private fun CategoriesScreen(
                 )
             }
         }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(112.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.86f),
+                            MaterialTheme.colorScheme.background
+                        )
+                    )
+                )
+        )
 
         SmallFloatingActionButton(
             onClick = { categoryEditor = CategoryEditorState() },
@@ -2263,12 +2323,31 @@ private fun CategoryGroup(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { onAddKeyword(topLevelCategory) }) {
+                TextButton(
+                    onClick = { onAddKeyword(topLevelCategory) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(stringResource(R.string.add_keyword))
                 }
-                TextButton(onClick = { onAddSubcategory(topLevelCategory) }) {
+                TextButton(
+                    onClick = { onAddSubcategory(topLevelCategory) },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(stringResource(R.string.add_subcategory))
                 }
             }
@@ -2318,42 +2397,61 @@ private fun CategoryKeywordRow(
     onEditCategory: () -> Unit,
     onDeleteCategory: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = categoryLabel(category),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleMedium
-            )
-            TextButton(onClick = onAddKeyword) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = categoryLabel(category),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!category.isSystem) {
+                    IconButton(onClick = onEditCategory) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = stringResource(R.string.edit_category)
+                        )
+                    }
+                    IconButton(onClick = onDeleteCategory) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = stringResource(R.string.delete_category)
+                        )
+                    }
+                }
+            }
+            TextButton(
+                onClick = onAddKeyword,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(stringResource(R.string.add_keyword))
             }
-            if (!category.isSystem) {
-                IconButton(onClick = onEditCategory) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = stringResource(R.string.edit_category)
-                    )
-                }
-                IconButton(onClick = onDeleteCategory) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = stringResource(R.string.delete_category)
-                    )
-                }
+            if (keywords.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.no_keywords),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                KeywordChips(keywords, onDeleteKeyword)
             }
-        }
-        if (keywords.isEmpty()) {
-            Text(
-                text = stringResource(R.string.no_keywords),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            KeywordChips(keywords, onDeleteKeyword)
         }
     }
 }
@@ -2363,7 +2461,10 @@ private fun KeywordChips(
     keywords: List<KeywordRuleEntity>,
     onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(end = 4.dp)
+    ) {
         items(keywords, key = { it.id }) { rule ->
             AssistChip(
                 onClick = { onDeleteKeyword(rule) },
@@ -2971,10 +3072,19 @@ private fun financeTextFieldColors() = TextFieldDefaults.colors(
 )
 
 @Composable
-private fun SettingsScreen(modifier: Modifier = Modifier) {
+private fun SettingsScreen(
+    importState: ImportUiState,
+    onImportFile: (Uri) -> Unit,
+    onDismissImport: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val selectedLanguage = remember {
         currentAppLanguage()
     }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri -> uri?.let(onImportFile) }
+    )
 
     Column(
         modifier = modifier
@@ -3020,6 +3130,122 @@ private fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = stringResource(R.string.import_otp_title),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.import_otp_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.import_otp_formats),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    enabled = !importState.isImporting,
+                    onClick = {
+                        importLauncher.launch(
+                            arrayOf(
+                                "application/pdf",
+                                "text/csv",
+                                "text/comma-separated-values",
+                                "application/vnd.ms-excel"
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (importState.isImporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (importState.isImporting) {
+                            stringResource(R.string.import_otp_importing)
+                        } else {
+                            stringResource(R.string.import_otp_action)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    importState.summary?.let { summary ->
+        val formatLabel = when (summary.format) {
+            OtpImportFormat.PDF -> stringResource(R.string.import_otp_pdf)
+            OtpImportFormat.CSV -> stringResource(R.string.import_otp_csv)
+        }
+        AlertDialog(
+            onDismissRequest = onDismissImport,
+            title = { Text(stringResource(R.string.import_otp_success_title)) },
+            text = {
+                Text(
+                    text = if (summary.duplicateCount > 0) {
+                        pluralStringResource(
+                            R.plurals.import_otp_success_with_duplicates,
+                            summary.importedCount,
+                            summary.importedCount,
+                            summary.parsedCount,
+                            formatLabel,
+                            summary.duplicateCount
+                        )
+                    } else {
+                        pluralStringResource(
+                            R.plurals.import_otp_success,
+                            summary.importedCount,
+                            summary.importedCount,
+                            summary.parsedCount,
+                            formatLabel
+                        )
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = onDismissImport) {
+                    Text(stringResource(R.string.import_otp_done))
+                }
+            }
+        )
+    }
+
+    importState.error?.let { error ->
+        val messageRes = when (error) {
+            ImportError.UNSUPPORTED_FILE -> R.string.import_otp_error_unsupported_file
+            ImportError.INVALID_FILE -> R.string.import_otp_error_invalid_file
+            ImportError.NO_TRANSACTIONS -> R.string.import_otp_error_no_transactions
+            ImportError.READ_FAILED -> R.string.import_otp_error_read_failed
+        }
+        AlertDialog(
+            onDismissRequest = onDismissImport,
+            title = { Text(stringResource(R.string.import_otp_error_title)) },
+            text = { Text(stringResource(messageRes)) },
+            confirmButton = {
+                TextButton(onClick = onDismissImport) {
+                    Text(stringResource(R.string.import_otp_done))
+                }
+            }
+        )
     }
 }
 

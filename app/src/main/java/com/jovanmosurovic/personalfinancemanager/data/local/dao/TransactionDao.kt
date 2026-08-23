@@ -16,6 +16,9 @@ interface TransactionDao {
     @Query("SELECT * FROM finance_transactions WHERE id = :transactionId LIMIT 1")
     suspend fun getById(transactionId: Long): TransactionEntity?
 
+    @Query("SELECT * FROM finance_transactions")
+    suspend fun getAll(): List<TransactionEntity>
+
     @Query("SELECT * FROM finance_transactions WHERE categoryId IS NULL")
     suspend fun getUncategorized(): List<TransactionEntity>
 

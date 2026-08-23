@@ -111,6 +111,31 @@
     <string name="language_description">Izaberite jezik koji aplikacija koristi.</string>
     <string name="language_serbian_latin">Srpski (latinica)</string>
     <string name="language_english">Engleski</string>
+    <string name="import_otp_title">Uvoz OTP izvoda</string>
+    <string name="import_otp_description">Uvezite transakcije direktno iz izvoda OTP banke.</string>
+    <string name="import_otp_formats">Podržani formati: OTP PDF izvod i CSV.</string>
+    <string name="import_otp_pdf">OTP PDF izvod</string>
+    <string name="import_otp_csv">OTP CSV izvod</string>
+    <string name="import_otp_action">Izaberi OTP izvod</string>
+    <string name="import_otp_importing">Uvoz izvoda…</string>
+    <string name="import_otp_success_title">OTP izvod je uvezen</string>
+    <string name="import_otp_error_title">Uvoz nije uspeo</string>
+    <string name="import_otp_error_unsupported_file">Izaberite OTP PDF ili CSV izvod.</string>
+    <string name="import_otp_error_invalid_file">Izabrani fajl nije moguće pročitati kao OTP izvod.</string>
+    <string name="import_otp_error_no_transactions">U izabranom fajlu nisu pronađene validne transakcije.</string>
+    <string name="import_otp_error_read_failed">Izabrani fajl nije moguće otvoriti.</string>
+    <string name="import_otp_done">Gotovo</string>
+
+    <plurals name="import_otp_success">
+        <item quantity="one">Uvezena je %1$d od %2$d transakcije iz formata %3$s.</item>
+        <item quantity="few">Uvezeno je %1$d od %2$d transakcije iz formata %3$s.</item>
+        <item quantity="other">Uvezeno je %1$d od %2$d transakcija iz formata %3$s.</item>
+    </plurals>
+    <plurals name="import_otp_success_with_duplicates">
+        <item quantity="one">Uvezena je %1$d od %2$d transakcije iz formata %3$s. Preskočeno duplikata: %4$d.</item>
+        <item quantity="few">Uvezeno je %1$d od %2$d transakcije iz formata %3$s. Preskočeno duplikata: %4$d.</item>
+        <item quantity="other">Uvezeno je %1$d od %2$d transakcija iz formata %3$s. Preskočeno duplikata: %4$d.</item>
+    </plurals>
 
     <string name="category_food">Hrana</string>
     <string name="category_groceries">Namirnice</string>

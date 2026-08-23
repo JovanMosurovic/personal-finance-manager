@@ -110,6 +110,29 @@
     <string name="language_description">Choose the language used by the app.</string>
     <string name="language_serbian_latin">Serbian (Latin)</string>
     <string name="language_english">English</string>
+    <string name="import_otp_title">Import OTP statement</string>
+    <string name="import_otp_description">Import transactions directly from an OTP Bank statement.</string>
+    <string name="import_otp_formats">Supported formats: OTP PDF statement and CSV.</string>
+    <string name="import_otp_pdf">OTP PDF statement</string>
+    <string name="import_otp_csv">OTP CSV statement</string>
+    <string name="import_otp_action">Choose OTP statement</string>
+    <string name="import_otp_importing">Importing statement…</string>
+    <string name="import_otp_success_title">OTP statement imported</string>
+    <string name="import_otp_error_title">Import failed</string>
+    <string name="import_otp_error_unsupported_file">Choose an OTP PDF or CSV statement.</string>
+    <string name="import_otp_error_invalid_file">The selected file could not be read as an OTP statement.</string>
+    <string name="import_otp_error_no_transactions">No valid transactions were found in the selected file.</string>
+    <string name="import_otp_error_read_failed">The selected file could not be opened.</string>
+    <string name="import_otp_done">Done</string>
+
+    <plurals name="import_otp_success">
+        <item quantity="one">Imported %1$d of %2$d transaction from %3$s.</item>
+        <item quantity="other">Imported %1$d of %2$d transactions from %3$s.</item>
+    </plurals>
+    <plurals name="import_otp_success_with_duplicates">
+        <item quantity="one">Imported %1$d of %2$d transaction from %3$s. Skipped duplicates: %4$d.</item>
+        <item quantity="other">Imported %1$d of %2$d transactions from %3$s. Skipped duplicates: %4$d.</item>
+    </plurals>
 
     <string name="category_food">Food</string>
     <string name="category_groceries">Groceries</string>
