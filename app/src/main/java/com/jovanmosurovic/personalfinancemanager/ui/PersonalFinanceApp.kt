@@ -266,6 +266,24 @@ fun PersonalFinanceApp() {
         transactionInitialDateStartEpochDay = null
         transactionInitialDateEndEpochDay = null
     }
+    val openTransactionsWithFilters: (
+        Long?,
+        TransactionTypeFilter,
+        Long?,
+        Long?
+    ) -> Unit = { categoryId, typeFilter, start, end ->
+        transactionInitialCategoryId = categoryId ?: ALL_CATEGORIES_FILTER
+        transactionInitialTypeFilterName = typeFilter.name
+        transactionInitialDateStartEpochDay = start
+        transactionInitialDateEndEpochDay = end
+        navController.navigate(TRANSACTIONS_ROUTE) {
+            popUpTo(TopLevelDestination.DASHBOARD.route) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = false
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -385,12 +403,7 @@ fun PersonalFinanceApp() {
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
                         onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
-                        onViewTransactions = {
-                            resetTransactionNavigationFilter()
-                            navController.navigate(TopLevelDestination.TRANSACTIONS.route) {
-                                launchSingleTop = true
-                            }
-                        }
+                        onViewTransactions = openTransactionsWithFilters
                     )
                 }
                 composable(TRANSACTIONS_ROUTE) {
@@ -416,17 +429,7 @@ fun PersonalFinanceApp() {
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
                         onViewAllTransactions = { categoryId, typeFilter, start, end ->
-                            transactionInitialCategoryId = categoryId ?: ALL_CATEGORIES_FILTER
-                            transactionInitialTypeFilterName = typeFilter.name
-                            transactionInitialDateStartEpochDay = start
-                            transactionInitialDateEndEpochDay = end
-                            navController.navigate(TRANSACTIONS_ROUTE) {
-                                popUpTo(TopLevelDestination.DASHBOARD.route) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = false
-                            }
+                            openTransactionsWithFilters(categoryId, typeFilter, start, end)
                         }
                     )
                 }
@@ -474,9 +477,16 @@ private fun DashboardScreen(
     uiState: FinanceUiState,
     areAmountsHidden: Boolean,
     onAmountsVisibilityChanged: (Boolean) -> Unit,
-    onViewTransactions: () -> Unit,
+    onViewTransactions: (
+        categoryId: Long?,
+        typeFilter: TransactionTypeFilter,
+        dateStartEpochDay: Long?,
+        dateEndEpochDay: Long?
+    ) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val currentMonthRange = AnalyticsPeriod.THIS_MONTH.dateRange(LocalDate.now())
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -558,14 +568,30 @@ private fun DashboardScreen(
                 label = stringResource(R.string.income_this_month),
                 value = formatMoney(uiState.incomeThisMonthMinor),
                 accentColor = MaterialTheme.colorScheme.secondary,
-                valueBlurred = areAmountsHidden
+                valueBlurred = areAmountsHidden,
+                    onClick = {
+                        onViewTransactions(
+                            null,
+                            TransactionTypeFilter.INCOME,
+                            currentMonthRange.start.toEpochDay(),
+                            currentMonthRange.end.toEpochDay()
+                        )
+                    }
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.expenses_this_month),
                 value = formatMoney(uiState.expensesThisMonthMinor),
                 accentColor = MaterialTheme.colorScheme.tertiary,
-                valueBlurred = areAmountsHidden
+                valueBlurred = areAmountsHidden,
+                    onClick = {
+                        onViewTransactions(
+                            null,
+                            TransactionTypeFilter.EXPENSE,
+                            currentMonthRange.start.toEpochDay(),
+                            currentMonthRange.end.toEpochDay()
+                        )
+                    }
             )
         }
 
@@ -596,7 +622,15 @@ private fun DashboardScreen(
                 SpendingChart(
                     transactions = uiState.transactions,
                     emptyLabel = stringResource(R.string.expense_chart_placeholder),
-                    areAmountsHidden = areAmountsHidden
+                    areAmountsHidden = areAmountsHidden,
+                    onDateSelected = { date ->
+                        onViewTransactions(
+                            null,
+                            TransactionTypeFilter.ALL,
+                            date.toEpochDay(),
+                            date.toEpochDay()
+                        )
+                    }
                 )
             }
         }
@@ -605,7 +639,14 @@ private fun DashboardScreen(
             transactions = uiState.transactions,
             categories = uiState.categories,
             areAmountsHidden = areAmountsHidden,
-            onViewAll = onViewTransactions
+            onViewAll = {
+                onViewTransactions(
+                    null,
+                    TransactionTypeFilter.ALL,
+                    null,
+                    null
+                )
+            }
         )
     }
 }
@@ -616,10 +657,17 @@ private fun MetricCard(
     value: String,
     accentColor: Color,
     modifier: Modifier = Modifier,
-    valueBlurred: Boolean = false
+    valueBlurred: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
+    val cardModifier = if (onClick == null) {
+        modifier
+    } else {
+        modifier.clickable(role = Role.Button, onClick = onClick)
+    }
+
     Card(
-        modifier = modifier,
+        modifier = cardModifier,
         colors = CardDefaults.cardColors(
             containerColor = accentColor.copy(alpha = 0.10f)
         )
