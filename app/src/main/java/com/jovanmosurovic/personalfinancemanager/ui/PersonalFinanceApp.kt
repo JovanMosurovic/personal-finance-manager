@@ -221,6 +221,7 @@ private enum class TransactionDateFilter(val labelRes: Int) {
     LAST_7_DAYS(R.string.analytics_period_7_days),
     LAST_30_DAYS(R.string.analytics_period_30_days),
     THIS_MONTH(R.string.analytics_period_this_month),
+    MONTH(R.string.filter_period_month),
     CUSTOM(R.string.filter_period_custom)
 }
 
@@ -233,6 +234,7 @@ private enum class TransactionSort(val labelRes: Int) {
 
 private const val ALL_CATEGORIES_FILTER = Long.MIN_VALUE
 private const val UNCATEGORIZED_FILTER = 0L
+private const val TRANSACTIONS_ROUTE = "transactions"
 private const val ADD_TRANSACTION_ROUTE = "add_transaction"
 
 @Composable
@@ -245,6 +247,25 @@ fun PersonalFinanceApp() {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val isAddTransactionRoute = currentRoute == ADD_TRANSACTION_ROUTE
+    var transactionInitialCategoryId by rememberSaveable {
+        mutableStateOf(ALL_CATEGORIES_FILTER)
+    }
+    var transactionInitialTypeFilterName by rememberSaveable {
+        mutableStateOf(TransactionTypeFilter.ALL.name)
+    }
+    var transactionInitialDateStartEpochDay by rememberSaveable {
+        mutableStateOf<Long?>(null)
+    }
+    var transactionInitialDateEndEpochDay by rememberSaveable {
+        mutableStateOf<Long?>(null)
+    }
+
+    val resetTransactionNavigationFilter = {
+        transactionInitialCategoryId = ALL_CATEGORIES_FILTER
+        transactionInitialTypeFilterName = TransactionTypeFilter.ALL.name
+        transactionInitialDateStartEpochDay = null
+        transactionInitialDateEndEpochDay = null
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -275,20 +296,48 @@ fun PersonalFinanceApp() {
                             windowInsets = WindowInsets(0, 0, 0, 0)
                         ) {
                             TopLevelDestination.entries.forEach { destination ->
+                                val isDestinationSelected = if (
+                                    destination == TopLevelDestination.TRANSACTIONS
+                                ) {
+                                    currentRoute == TRANSACTIONS_ROUTE
+                                } else {
+                                    currentRoute == destination.route
+                                }
                                 NavigationBarItem(
-                                    selected = currentRoute == destination.route,
+                                    selected = isDestinationSelected,
                                     onClick = {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(TopLevelDestination.DASHBOARD.route) {
-                                                saveState = true
+                                        if (destination == TopLevelDestination.ANALYTICS) {
+                                            if (currentRoute != destination.route) {
+                                                val returnedToAnalytics = navController.popBackStack(
+                                                    destination.route,
+                                                    inclusive = false
+                                                )
+                                                if (!returnedToAnalytics) {
+                                                    navController.navigate(destination.route) {
+                                                        popUpTo(TopLevelDestination.DASHBOARD.route) {
+                                                            saveState = true
+                                                        }
+                                                        launchSingleTop = true
+                                                        restoreState = true
+                                                    }
+                                                }
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
+                                        } else {
+                                            if (destination == TopLevelDestination.TRANSACTIONS) {
+                                                resetTransactionNavigationFilter()
+                                            }
+                                            navController.navigate(destination.route) {
+                                                popUpTo(TopLevelDestination.DASHBOARD.route) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = destination != TopLevelDestination.TRANSACTIONS
+                                            }
                                         }
                                     },
                                     icon = {
                                         Icon(
-                                            imageVector = if (currentRoute == destination.route) {
+                                            imageVector = if (isDestinationSelected) {
                                                 destination.selectedIcon
                                             } else {
                                                 destination.icon
@@ -337,16 +386,23 @@ fun PersonalFinanceApp() {
                         areAmountsHidden = areAmountsHidden,
                         onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
                         onViewTransactions = {
+                            resetTransactionNavigationFilter()
                             navController.navigate(TopLevelDestination.TRANSACTIONS.route) {
                                 launchSingleTop = true
                             }
                         }
                     )
                 }
-                composable(TopLevelDestination.TRANSACTIONS.route) {
+                composable(TRANSACTIONS_ROUTE) {
                     TransactionsScreen(
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
+                        initialCategoryId = transactionInitialCategoryId,
+                        initialTypeFilter = TransactionTypeFilter.entries.firstOrNull {
+                            it.name == transactionInitialTypeFilterName
+                        } ?: TransactionTypeFilter.ALL,
+                        initialDateStartEpochDay = transactionInitialDateStartEpochDay,
+                        initialDateEndEpochDay = transactionInitialDateEndEpochDay,
                         onAddTransaction = {
                             navController.navigate(ADD_TRANSACTION_ROUTE)
                         },
@@ -358,7 +414,20 @@ fun PersonalFinanceApp() {
                 composable(TopLevelDestination.ANALYTICS.route) {
                     AnalyticsScreen(
                         uiState = uiState,
-                        areAmountsHidden = areAmountsHidden
+                        areAmountsHidden = areAmountsHidden,
+                        onViewAllTransactions = { categoryId, typeFilter, start, end ->
+                            transactionInitialCategoryId = categoryId ?: ALL_CATEGORIES_FILTER
+                            transactionInitialTypeFilterName = typeFilter.name
+                            transactionInitialDateStartEpochDay = start
+                            transactionInitialDateEndEpochDay = end
+                            navController.navigate(TRANSACTIONS_ROUTE) {
+                                popUpTo(TopLevelDestination.DASHBOARD.route) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
                     )
                 }
                 composable(TopLevelDestination.CATEGORIES.route) {
@@ -1002,30 +1071,69 @@ private fun TransactionBadge(
 private fun TransactionsScreen(
     uiState: FinanceUiState,
     areAmountsHidden: Boolean,
+    modifier: Modifier = Modifier,
+    initialCategoryId: Long = ALL_CATEGORIES_FILTER,
+    initialTypeFilter: TransactionTypeFilter = TransactionTypeFilter.ALL,
+    initialDateStartEpochDay: Long? = null,
+    initialDateEndEpochDay: Long? = null,
     onAddTransaction: () -> Unit,
     onAssignCategory: (Long, Long, Boolean) -> Unit,
     onUpdateTransaction: (Long, TransactionType, Long, String, String, Long) -> Unit,
-    onDeleteTransaction: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    onDeleteTransaction: (Long) -> Unit
 ) {
-    var searchQuery by rememberSaveable {
+    var searchQuery by rememberSaveable(
+        initialCategoryId,
+        initialTypeFilter.name,
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) {
         mutableStateOf("")
     }
-    var selectedTypeFilterName by rememberSaveable {
-        mutableStateOf(TransactionTypeFilter.ALL.name)
+    var selectedTypeFilterName by rememberSaveable(initialTypeFilter.name) {
+        mutableStateOf(initialTypeFilter.name)
     }
-    var selectedCategoryId by rememberSaveable {
-        mutableStateOf(ALL_CATEGORIES_FILTER)
+    var selectedCategoryId by rememberSaveable(initialCategoryId) {
+        mutableStateOf(initialCategoryId)
     }
-    var selectedDateFilterName by rememberSaveable {
-        mutableStateOf(TransactionDateFilter.ALL_TIME.name)
+    val hasInitialDateFilter = initialDateStartEpochDay != null && initialDateEndEpochDay != null
+    var selectedDateFilterName by rememberSaveable(
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) {
+        mutableStateOf(
+            if (hasInitialDateFilter) {
+                TransactionDateFilter.CUSTOM.name
+            } else {
+                TransactionDateFilter.ALL_TIME.name
+            }
+        )
     }
-    var selectedSortName by rememberSaveable {
+    var selectedSortName by rememberSaveable(
+        initialCategoryId,
+        initialTypeFilter.name,
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) {
         mutableStateOf(TransactionSort.NEWEST.name)
     }
-    var customStartEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
-    var customEndEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var customStartEpochDay by rememberSaveable(
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) { mutableStateOf(initialDateStartEpochDay) }
+    var customEndEpochDay by rememberSaveable(
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) { mutableStateOf(initialDateEndEpochDay) }
+    var selectedMonthEpochDay by rememberSaveable(
+        initialCategoryId,
+        initialTypeFilter.name,
+        initialDateStartEpochDay,
+        initialDateEndEpochDay
+    ) {
+        mutableStateOf(LocalDate.now().withDayOfMonth(1).toEpochDay())
+    }
     var showCustomDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showMonthPicker by rememberSaveable { mutableStateOf(false) }
     var selectedTransaction by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionForCategory by remember { mutableStateOf<TransactionEntity?>(null) }
     var transactionBeingEdited by remember { mutableStateOf<TransactionEntity?>(null) }
@@ -1037,21 +1145,24 @@ private fun TransactionsScreen(
     val selectedCategory = uiState.categories.firstOrNull {
         it.id == selectedCategoryId
     }
+    val selectedMonth = LocalDate.ofEpochDay(selectedMonthEpochDay).withDayOfMonth(1)
+    val transactionMonths = availableMonthsUntil(
+        transactions = uiState.transactions,
+        latestMonth = LocalDate.now().withDayOfMonth(1)
+    )
     val selectedDateFilter = TransactionDateFilter.entries.firstOrNull {
         it.name == selectedDateFilterName
     } ?: TransactionDateFilter.ALL_TIME
-    val selectedDateFilterLabel = if (
+    val selectedDateFilterLabel = when {
+        selectedDateFilter == TransactionDateFilter.MONTH -> formatMonthYear(selectedMonth)
         selectedDateFilter == TransactionDateFilter.CUSTOM &&
-        customStartEpochDay != null &&
-        customEndEpochDay != null
-    ) {
-        stringResource(
-            R.string.filter_period_custom_range,
-            formatDate(customStartEpochDay!!),
-            formatDate(customEndEpochDay!!)
-        )
-    } else {
-        stringResource(selectedDateFilter.labelRes)
+            customStartEpochDay != null &&
+            customEndEpochDay != null -> stringResource(
+                R.string.filter_period_custom_range,
+                formatDate(customStartEpochDay!!),
+                formatDate(customEndEpochDay!!)
+            )
+        else -> stringResource(selectedDateFilter.labelRes)
     }
     val selectedSort = TransactionSort.entries.firstOrNull {
         it.name == selectedSortName
@@ -1063,6 +1174,7 @@ private fun TransactionsScreen(
         typeFilter = selectedTypeFilter,
         categoryId = selectedCategoryId,
         dateFilter = selectedDateFilter,
+        selectedMonthEpochDay = selectedMonthEpochDay,
         customStartEpochDay = customStartEpochDay,
         customEndEpochDay = customEndEpochDay
     )
@@ -1072,6 +1184,18 @@ private fun TransactionsScreen(
         selectedCategoryId != ALL_CATEGORIES_FILTER ||
         selectedDateFilter != TransactionDateFilter.ALL_TIME ||
         selectedSort != TransactionSort.NEWEST
+    val clearFilters = {
+        searchQuery = ""
+        selectedTypeFilterName = TransactionTypeFilter.ALL.name
+        selectedCategoryId = ALL_CATEGORIES_FILTER
+        selectedDateFilterName = TransactionDateFilter.ALL_TIME.name
+        selectedMonthEpochDay = LocalDate.now().withDayOfMonth(1).toEpochDay()
+        customStartEpochDay = null
+        customEndEpochDay = null
+        showCustomDatePicker = false
+        showMonthPicker = false
+        selectedSortName = TransactionSort.NEWEST.name
+    }
 
     Scaffold(
         modifier = modifier,
@@ -1247,10 +1371,16 @@ private fun TransactionsScreen(
                                     DropdownMenuItem(
                                         text = { Text(stringResource(filter.labelRes)) },
                                         onClick = {
-                                            if (filter == TransactionDateFilter.CUSTOM) {
-                                                showCustomDatePicker = true
-                                            } else {
-                                                selectedDateFilterName = filter.name
+                                            when (filter) {
+                                                TransactionDateFilter.MONTH -> {
+                                                    showMonthPicker = true
+                                                }
+                                                TransactionDateFilter.CUSTOM -> {
+                                                    showCustomDatePicker = true
+                                                }
+                                                else -> {
+                                                    selectedDateFilterName = filter.name
+                                                }
                                             }
                                             closeMenu()
                                         }
@@ -1278,20 +1408,31 @@ private fun TransactionsScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                if (hasActiveFilters) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = clearFilters,
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(stringResource(R.string.clear_filters))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 if (visibleTransactions.isEmpty() && uiState.transactions.isNotEmpty()) {
                     NoMatchingTransactionsContent(
                         showClearAction = hasActiveFilters,
-                        onClear = {
-                            searchQuery = ""
-                            selectedTypeFilterName = TransactionTypeFilter.ALL.name
-                            selectedCategoryId = ALL_CATEGORIES_FILTER
-                            selectedDateFilterName = TransactionDateFilter.ALL_TIME.name
-                            customStartEpochDay = null
-                            customEndEpochDay = null
-                            showCustomDatePicker = false
-                            selectedSortName = TransactionSort.NEWEST.name
-                        }
+                        onClear = clearFilters
                     )
                 } else if (visibleTransactions.isEmpty()) {
                     EmptyTransactionsContent()
@@ -1427,6 +1568,20 @@ private fun TransactionsScreen(
                 customEndEpochDay = maxOf(startEpochDay, endEpochDay)
                 selectedDateFilterName = TransactionDateFilter.CUSTOM.name
                 showCustomDatePicker = false
+            }
+        )
+    }
+
+    if (showMonthPicker) {
+        AnalyticsMonthPickerDialog(
+            titleRes = R.string.select_transaction_month,
+            initialMonth = selectedMonth,
+            availableMonths = transactionMonths,
+            onDismiss = { showMonthPicker = false },
+            onConfirm = { month ->
+                selectedMonthEpochDay = month.withDayOfMonth(1).toEpochDay()
+                selectedDateFilterName = TransactionDateFilter.MONTH.name
+                showMonthPicker = false
             }
         )
     }
@@ -1599,6 +1754,7 @@ private fun filterTransactions(
     typeFilter: TransactionTypeFilter,
     categoryId: Long,
     dateFilter: TransactionDateFilter,
+    selectedMonthEpochDay: Long,
     customStartEpochDay: Long?,
     customEndEpochDay: Long?,
     today: LocalDate = LocalDate.now()
@@ -1631,6 +1787,11 @@ private fun filterTransactions(
                 today.minusDays(29).toEpochDay()..todayEpochDay
             TransactionDateFilter.THIS_MONTH -> transaction.dateEpochDay in
                 today.withDayOfMonth(1).toEpochDay()..todayEpochDay
+            TransactionDateFilter.MONTH -> {
+                val month = LocalDate.ofEpochDay(selectedMonthEpochDay).withDayOfMonth(1)
+                transaction.dateEpochDay in
+                    month.toEpochDay()..month.withDayOfMonth(month.lengthOfMonth()).toEpochDay()
+            }
             TransactionDateFilter.CUSTOM -> {
                 customStartEpochDay != null &&
                     customEndEpochDay != null &&
@@ -2765,6 +2926,12 @@ private fun AddKeywordDialog(
 private fun AnalyticsScreen(
     uiState: FinanceUiState,
     areAmountsHidden: Boolean,
+    onViewAllTransactions: (
+        categoryId: Long?,
+        typeFilter: TransactionTypeFilter,
+        dateStartEpochDay: Long?,
+        dateEndEpochDay: Long?
+    ) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedPeriodName by rememberSaveable {
@@ -3148,6 +3315,15 @@ private fun AnalyticsScreen(
             transactions = selectedCategoryTransactions,
             categories = uiState.categories,
             areAmountsHidden = areAmountsHidden,
+            onViewAllTransactions = {
+                showCategoryDetails = false
+                onViewAllTransactions(
+                    selectedCategoryId ?: UNCATEGORIZED_FILTER,
+                    TransactionTypeFilter.EXPENSE,
+                    currentRange.start.toEpochDay(),
+                    currentRange.end.toEpochDay()
+                )
+            },
             onDismiss = { showCategoryDetails = false }
         )
     }
@@ -3158,6 +3334,15 @@ private fun AnalyticsScreen(
             transactions = selectedDayTransactions.orEmpty(),
             categories = uiState.categories,
             areAmountsHidden = areAmountsHidden,
+            onViewAllTransactions = {
+                selectedDateEpochDay = null
+                onViewAllTransactions(
+                    null,
+                    TransactionTypeFilter.ALL,
+                    date.toEpochDay(),
+                    date.toEpochDay()
+                )
+            },
             onDismiss = { selectedDateEpochDay = null }
         )
     }
@@ -3758,6 +3943,7 @@ private fun AnalyticsCategoryDetailsSheet(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
     areAmountsHidden: Boolean,
+    onViewAllTransactions: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val expenseTotal = transactions.sumOf { it.amountMinor }
@@ -3841,6 +4027,19 @@ private fun AnalyticsCategoryDetailsSheet(
                     }
                 }
             }
+
+            OutlinedButton(
+                onClick = onViewAllTransactions,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.view_all_transactions))
+            }
         }
     }
 }
@@ -3852,6 +4051,7 @@ private fun AnalyticsDayDetailsSheet(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
     areAmountsHidden: Boolean,
+    onViewAllTransactions: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val expenseTotal = transactions
@@ -3936,6 +4136,19 @@ private fun AnalyticsDayDetailsSheet(
                         )
                     }
                 }
+            }
+
+            OutlinedButton(
+                onClick = onViewAllTransactions,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ReceiptLong,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.view_all_transactions))
             }
         }
     }

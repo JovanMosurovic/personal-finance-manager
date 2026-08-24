@@ -20,6 +20,7 @@
     <string name="chart_last_7_days">Poslednjih 7 dana</string>
     <string name="dashboard_recent_transactions">Nedavna aktivnost</string>
     <string name="view_all">Prikaži sve</string>
+    <string name="view_all_transactions">Prikaži sve transakcije</string>
     <string name="hide_amounts">Sakrij iznose</string>
     <string name="show_amounts">Prikaži iznose</string>
     <string name="privacy_title">Privatni režim</string>
@@ -32,8 +33,10 @@
     <string name="filter_type_all">Svi tipovi</string>
     <string name="filter_category_all">Sve kategorije</string>
     <string name="filter_period_all">Svi datumi</string>
+    <string name="filter_period_month">Mesec</string>
     <string name="filter_period_custom">Prilagođeno</string>
     <string name="filter_period_custom_range">%1$s - %2$s</string>
+    <string name="select_transaction_month">Izaberite mesec</string>
     <string name="select_date_range">Izaberite period</string>
     <string name="date_range_start">Početak</string>
     <string name="date_range_end">Kraj</string>
