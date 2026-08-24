@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -1193,11 +1194,14 @@ private fun TransactionsScreen(
     val selectedCategory = uiState.categories.firstOrNull {
         it.id == selectedCategoryId
     }
+    val today = LocalDate.now()
     val selectedMonth = LocalDate.ofEpochDay(selectedMonthEpochDay).withDayOfMonth(1)
-    val transactionMonths = availableMonthsUntil(
-        transactions = uiState.transactions,
-        latestMonth = LocalDate.now().withDayOfMonth(1)
-    )
+    val transactionMonths = remember(uiState.transactions, today) {
+        availableMonthsUntil(
+            transactions = uiState.transactions,
+            latestMonth = today.withDayOfMonth(1)
+        )
+    }
     val selectedDateFilter = TransactionDateFilter.entries.firstOrNull {
         it.name == selectedDateFilterName
     } ?: TransactionDateFilter.ALL_TIME
@@ -1215,18 +1219,35 @@ private fun TransactionsScreen(
     val selectedSort = TransactionSort.entries.firstOrNull {
         it.name == selectedSortName
     } ?: TransactionSort.NEWEST
-    val uncategorizedTransactions = uiState.transactions.filter { it.categoryId == null }
-    val filteredTransactions = filterTransactions(
-        transactions = uiState.transactions,
-        searchQuery = searchQuery,
-        typeFilter = selectedTypeFilter,
-        categoryId = selectedCategoryId,
-        dateFilter = selectedDateFilter,
-        selectedMonthEpochDay = selectedMonthEpochDay,
-        customStartEpochDay = customStartEpochDay,
-        customEndEpochDay = customEndEpochDay
-    )
-    val visibleTransactions = sortTransactions(filteredTransactions, selectedSort)
+    val uncategorizedTransactions = remember(uiState.transactions) {
+        uiState.transactions.filter { it.categoryId == null }
+    }
+    val filteredTransactions = remember(
+        uiState.transactions,
+        searchQuery,
+        selectedTypeFilter,
+        selectedCategoryId,
+        selectedDateFilter,
+        selectedMonthEpochDay,
+        customStartEpochDay,
+        customEndEpochDay,
+        today
+    ) {
+        filterTransactions(
+            transactions = uiState.transactions,
+            searchQuery = searchQuery,
+            typeFilter = selectedTypeFilter,
+            categoryId = selectedCategoryId,
+            dateFilter = selectedDateFilter,
+            selectedMonthEpochDay = selectedMonthEpochDay,
+            customStartEpochDay = customStartEpochDay,
+            customEndEpochDay = customEndEpochDay,
+            today = today
+        )
+    }
+    val visibleTransactions = remember(filteredTransactions, selectedSort) {
+        sortTransactions(filteredTransactions, selectedSort)
+    }
     val hasActiveFilters = searchQuery.isNotBlank() ||
         selectedTypeFilter != TransactionTypeFilter.ALL ||
         selectedCategoryId != ALL_CATEGORIES_FILTER ||
@@ -2496,35 +2517,51 @@ private fun CategoriesScreen(
     var keywordPendingDeletion by remember { mutableStateOf<KeywordRuleEntity?>(null) }
     var categoryEditor by remember { mutableStateOf<CategoryEditorState?>(null) }
     var categoryPendingDeletion by remember { mutableStateOf<CategoryEntity?>(null) }
-    val topLevelCategories = uiState.categories.filter { it.parentId == null }
+    val topLevelCategories = remember(uiState.categories) {
+        uiState.categories.filter { it.parentId == null }
+    }
+    val childrenByParentId = remember(uiState.categories) {
+        uiState.categories
+            .filter { it.parentId != null }
+            .groupBy { it.parentId }
+    }
+    val keywordsByCategoryId = remember(uiState.keywordRules) {
+        uiState.keywordRules.groupBy { it.categoryId }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 20.dp, top = 24.dp, end = 20.dp, bottom = 132.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                top = 24.dp,
+                end = 20.dp,
+                bottom = 132.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text(
-                text = stringResource(R.string.categories_title),
-                style = MaterialTheme.typography.headlineLarge
-            )
-
-            Text(
-                text = stringResource(R.string.categories_description),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            topLevelCategories.forEach { topLevelCategory ->
-                val children = uiState.categories.filter {
-                    it.parentId == topLevelCategory.id
-                }
+            item {
+                Text(
+                    text = stringResource(R.string.categories_title),
+                    style = MaterialTheme.typography.headlineLarge
+                )
+            }
+            item {
+                Text(
+                    text = stringResource(R.string.categories_description),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            items(
+                items = topLevelCategories,
+                key = { it.id },
+                contentType = { "category_group" }
+            ) { topLevelCategory ->
                 CategoryGroup(
                     topLevelCategory = topLevelCategory,
-                    children = children,
-                    keywordRules = uiState.keywordRules,
+                    children = childrenByParentId[topLevelCategory.id].orEmpty(),
+                    keywordsByCategoryId = keywordsByCategoryId,
                     onAddKeyword = { categoryForKeyword = it },
                     onDeleteKeyword = { keywordPendingDeletion = it },
                     onAddSubcategory = {
@@ -2724,7 +2761,7 @@ private fun CategoryEditorDialog(
 private fun CategoryGroup(
     topLevelCategory: CategoryEntity,
     children: List<CategoryEntity>,
-    keywordRules: List<KeywordRuleEntity>,
+    keywordsByCategoryId: Map<Long, List<KeywordRuleEntity>>,
     onAddKeyword: (CategoryEntity) -> Unit,
     onDeleteKeyword: (KeywordRuleEntity) -> Unit,
     onAddSubcategory: (CategoryEntity) -> Unit,
@@ -2795,16 +2832,14 @@ private fun CategoryGroup(
                     Text(stringResource(R.string.add_subcategory))
                 }
             }
-            val topLevelKeywords = keywordRules.filter {
-                it.categoryId == topLevelCategory.id
-            }
+            val topLevelKeywords = keywordsByCategoryId[topLevelCategory.id].orEmpty()
             if (topLevelKeywords.isNotEmpty()) {
                 KeywordChips(topLevelKeywords, onDeleteKeyword)
             }
             children.forEach { category ->
                 CategoryKeywordRow(
                     category = category,
-                    keywords = keywordRules.filter { it.categoryId == category.id },
+                    keywords = keywordsByCategoryId[category.id].orEmpty(),
                     onAddKeyword = { onAddKeyword(category) },
                     onDeleteKeyword = onDeleteKeyword,
                     onEditCategory = { onEditCategory(category) },
@@ -2905,11 +2940,14 @@ private fun KeywordChips(
     keywords: List<KeywordRuleEntity>,
     onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(end = 4.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(end = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(keywords, key = { it.id }) { rule ->
+        keywords.forEach { rule ->
             AssistChip(
                 onClick = { onDeleteKeyword(rule) },
                 label = {
