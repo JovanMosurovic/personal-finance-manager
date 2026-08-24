@@ -11,6 +11,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -82,6 +83,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -115,6 +117,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -148,6 +151,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
 
 private enum class TopLevelDestination(
     val route: String,
@@ -180,7 +185,29 @@ private enum class AnalyticsPeriod(
 ) {
     LAST_7_DAYS(R.string.analytics_period_7_days),
     LAST_30_DAYS(R.string.analytics_period_30_days),
-    THIS_MONTH(R.string.analytics_period_this_month)
+    THIS_MONTH(R.string.analytics_period_this_month),
+    CUSTOM(R.string.filter_period_custom)
+}
+
+private enum class AnalyticsCustomPeriodMode {
+    WHOLE_MONTH,
+    DATE_RANGE
+}
+
+private enum class AnalyticsComparisonMode(
+    val labelRes: Int
+) {
+    SAME_DURATION(R.string.analytics_same_duration),
+    PREVIOUS_MONTH(R.string.analytics_previous_month),
+    SELECTED_MONTH(R.string.analytics_selected_month)
+}
+
+private data class AnalyticsDateRange(
+    val start: LocalDate,
+    val end: LocalDate
+) {
+    val dayCount: Int
+        get() = ChronoUnit.DAYS.between(start, end).toInt() + 1
 }
 
 private enum class TransactionTypeFilter(val labelRes: Int) {
@@ -568,9 +595,12 @@ private fun SpendingChart(
     emptyLabel: String,
     modifier: Modifier = Modifier,
     period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS,
-    areAmountsHidden: Boolean = false
+    range: AnalyticsDateRange? = null,
+    areAmountsHidden: Boolean = false,
+    selectedDate: LocalDate? = null,
+    onDateSelected: ((LocalDate) -> Unit)? = null
 ) {
-    val points = spendingPointsForPeriod(transactions, period)
+    val points = spendingPointsForPeriod(transactions, period, range)
     val maxAmount = points.maxOfOrNull { it.amountMinor } ?: 0L
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -624,6 +654,19 @@ private fun SpendingChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp)
+                .pointerInput(points, onDateSelected) {
+                    if (onDateSelected == null) return@pointerInput
+
+                    detectTapGestures { tapOffset ->
+                        val gap = if (points.size > 14) 3.dp.toPx() else 7.dp.toPx()
+                        val barWidth = (size.width - gap * (points.size - 1)) / points.size
+                        val slotWidth = barWidth + gap
+                        val index = (tapOffset.x / slotWidth)
+                            .roundToInt()
+                            .coerceIn(0, points.lastIndex)
+                        onDateSelected(points[index].date)
+                    }
+                }
         ) {
             val bottom = size.height - 8.dp.toPx()
             val top = 8.dp.toPx()
@@ -645,12 +688,15 @@ private fun SpendingChart(
                 val barHeight = ((point.amountMinor.toFloat() / maxAmount) * chartHeight)
                     .coerceAtLeast(4.dp.toPx())
                 val x = index * (barWidth + gap)
+                val isSelected = selectedDate == point.date
+                val barColor = when {
+                    isSelected -> primaryColor
+                    selectedDate != null -> expenseColor.copy(alpha = 0.68f)
+                    index == points.lastIndex -> primaryColor
+                    else -> expenseColor
+                }
                 drawRoundRect(
-                    color = if (index == points.lastIndex) {
-                        primaryColor
-                    } else {
-                        expenseColor
-                    },
+                    color = barColor,
                     topLeft = Offset(x, bottom - barHeight),
                     size = Size(barWidth, barHeight),
                     cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
@@ -688,14 +734,14 @@ private fun SpendingChart(
 
 private fun spendingPointsForPeriod(
     transactions: List<TransactionEntity>,
-    period: AnalyticsPeriod
+    period: AnalyticsPeriod,
+    range: AnalyticsDateRange? = null
 ): List<SpendingPoint> {
     val today = LocalDate.now()
-    val startDate = period.startDate(today)
-    val dayCount = ChronoUnit.DAYS.between(startDate, today).toInt() + 1
+    val resolvedRange = range ?: period.dateRange(today)
 
-    return (0 until dayCount).map { dayOffset ->
-        val date = startDate.plusDays(dayOffset.toLong())
+    return (0 until resolvedRange.dayCount).map { dayOffset ->
+        val date = resolvedRange.start.plusDays(dayOffset.toLong())
         SpendingPoint(
             date = date,
             amountMinor = transactions
@@ -719,22 +765,124 @@ private fun chartDayLabel(date: LocalDate, useDate: Boolean): String = if (useDa
         .uppercase(Locale.getDefault())
 }
 
-private fun AnalyticsPeriod.startDate(today: LocalDate): LocalDate = when (this) {
-    AnalyticsPeriod.LAST_7_DAYS -> today.minusDays(6)
-    AnalyticsPeriod.LAST_30_DAYS -> today.minusDays(29)
-    AnalyticsPeriod.THIS_MONTH -> today.withDayOfMonth(1)
+private fun AnalyticsPeriod.dateRange(
+    today: LocalDate,
+    customRange: AnalyticsDateRange? = null
+): AnalyticsDateRange = when (this) {
+    AnalyticsPeriod.LAST_7_DAYS -> AnalyticsDateRange(
+        start = today.minusDays(6),
+        end = today
+    )
+    AnalyticsPeriod.LAST_30_DAYS -> AnalyticsDateRange(
+        start = today.minusDays(29),
+        end = today
+    )
+    AnalyticsPeriod.THIS_MONTH -> AnalyticsDateRange(
+        start = today.withDayOfMonth(1),
+        end = today
+    )
+    AnalyticsPeriod.CUSTOM -> customRange ?: AnalyticsDateRange(
+        start = today.withDayOfMonth(1),
+        end = today
+    )
 }
+
+private fun AnalyticsPeriod.comparisonRange(
+    today: LocalDate,
+    mode: AnalyticsComparisonMode,
+    selectedMonth: LocalDate = today.minusMonths(1).withDayOfMonth(1),
+    currentRange: AnalyticsDateRange? = null
+): AnalyticsDateRange {
+    if (mode == AnalyticsComparisonMode.PREVIOUS_MONTH) {
+        val previousMonth = today.minusMonths(1)
+        return AnalyticsDateRange(
+            start = previousMonth.withDayOfMonth(1),
+            end = previousMonth.withDayOfMonth(previousMonth.lengthOfMonth())
+        )
+    }
+
+    if (mode == AnalyticsComparisonMode.SELECTED_MONTH) {
+        val normalizedMonth = selectedMonth.withDayOfMonth(1)
+        return AnalyticsDateRange(
+            start = normalizedMonth,
+            end = normalizedMonth.withDayOfMonth(normalizedMonth.lengthOfMonth())
+        )
+    }
+
+    if (this == AnalyticsPeriod.THIS_MONTH) {
+        val previousMonth = today.minusMonths(1)
+        val previousMonthEndDay = minOf(today.dayOfMonth, previousMonth.lengthOfMonth())
+        return AnalyticsDateRange(
+            start = previousMonth.withDayOfMonth(1),
+            end = previousMonth.withDayOfMonth(previousMonthEndDay)
+        )
+    }
+
+    val range = currentRange ?: dateRange(today)
+    val comparisonEnd = range.start.minusDays(1)
+    return AnalyticsDateRange(
+        start = comparisonEnd.minusDays(range.dayCount.toLong() - 1),
+        end = comparisonEnd
+    )
+}
+
+private fun availableMonthsUntil(
+    transactions: List<TransactionEntity>,
+    latestMonth: LocalDate
+): List<LocalDate> {
+    val firstTransactionMonth = transactions
+        .asSequence()
+        .map { LocalDate.ofEpochDay(it.dateEpochDay).withDayOfMonth(1) }
+        .filter { !it.isAfter(latestMonth) }
+        .minOrNull()
+        ?: latestMonth.minusMonths(11)
+
+    val months = mutableListOf<LocalDate>()
+    var month = latestMonth
+    while (!month.isBefore(firstTransactionMonth)) {
+        months += month
+        month = month.minusMonths(1)
+    }
+    return months
+}
+
+private fun availableComparisonMonths(
+    transactions: List<TransactionEntity>,
+    today: LocalDate
+): List<LocalDate> = availableMonthsUntil(
+    transactions = transactions,
+    latestMonth = today.withDayOfMonth(1).minusMonths(1)
+)
 
 private fun transactionsInPeriod(
     transactions: List<TransactionEntity>,
     period: AnalyticsPeriod,
-    today: LocalDate = LocalDate.now()
+    today: LocalDate = LocalDate.now(),
+    customRange: AnalyticsDateRange? = null
 ): List<TransactionEntity> {
-    val startEpochDay = period.startDate(today).toEpochDay()
-    val endEpochDay = today.toEpochDay()
-    return transactions.filter {
-        it.dateEpochDay in startEpochDay..endEpochDay
-    }
+    return transactionsInRange(transactions, period.dateRange(today, customRange))
+}
+
+private fun transactionsInRange(
+    transactions: List<TransactionEntity>,
+    range: AnalyticsDateRange
+): List<TransactionEntity> {
+    val startEpochDay = range.start.toEpochDay()
+    val endEpochDay = range.end.toEpochDay()
+    return transactions.filter { it.dateEpochDay in startEpochDay..endEpochDay }
+}
+
+private fun formatDateRange(range: AnalyticsDateRange): String =
+    "${formatDate(range.start.toEpochDay())} - ${formatDate(range.end.toEpochDay())}"
+
+private fun percentageChange(current: Long, previous: Long): String {
+    if (previous == 0L) return "0%"
+
+    val percentage = ((current - previous).toDouble() / previous.toDouble()) * 100.0
+    return NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+        maximumFractionDigits = 0
+        minimumFractionDigits = 0
+    }.format(percentage.absoluteValue) + "%"
 }
 
 @Composable
@@ -2622,8 +2770,80 @@ private fun AnalyticsScreen(
     var selectedPeriodName by rememberSaveable {
         mutableStateOf(AnalyticsPeriod.LAST_7_DAYS.name)
     }
+    var comparisonModeName by rememberSaveable {
+        mutableStateOf(AnalyticsComparisonMode.SAME_DURATION.name)
+    }
+    var comparisonMonthEpochDay by rememberSaveable {
+        mutableStateOf(
+            LocalDate.now()
+                .minusMonths(1)
+                .withDayOfMonth(1)
+                .toEpochDay()
+        )
+    }
+    var showComparisonMonthPicker by rememberSaveable { mutableStateOf(false) }
+    var customPeriodModeName by rememberSaveable {
+        mutableStateOf(AnalyticsCustomPeriodMode.WHOLE_MONTH.name)
+    }
+    var customMonthEpochDay by rememberSaveable {
+        mutableStateOf(LocalDate.now().withDayOfMonth(1).toEpochDay())
+    }
+    var customStartEpochDay by rememberSaveable {
+        mutableStateOf(LocalDate.now().withDayOfMonth(1).toEpochDay())
+    }
+    var customEndEpochDay by rememberSaveable {
+        mutableStateOf(LocalDate.now().toEpochDay())
+    }
+    var showCustomPeriodOptions by rememberSaveable { mutableStateOf(false) }
+    var showCustomMonthPicker by rememberSaveable { mutableStateOf(false) }
+    var showCustomRangePicker by rememberSaveable { mutableStateOf(false) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showCategoryDetails by rememberSaveable { mutableStateOf(false) }
+    var selectedDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedPeriod = AnalyticsPeriod.valueOf(selectedPeriodName)
-    val periodTransactions = transactionsInPeriod(uiState.transactions, selectedPeriod)
+    val comparisonMode = AnalyticsComparisonMode.valueOf(comparisonModeName)
+    val customPeriodMode = AnalyticsCustomPeriodMode.valueOf(customPeriodModeName)
+    val today = LocalDate.now()
+    val customMonth = LocalDate.ofEpochDay(customMonthEpochDay).withDayOfMonth(1)
+    val customRange = if (customPeriodMode == AnalyticsCustomPeriodMode.WHOLE_MONTH) {
+        AnalyticsDateRange(
+            start = customMonth,
+            end = customMonth.withDayOfMonth(customMonth.lengthOfMonth())
+        )
+    } else {
+        val start = LocalDate.ofEpochDay(customStartEpochDay)
+        val end = LocalDate.ofEpochDay(customEndEpochDay)
+        AnalyticsDateRange(
+            start = minOf(start, end),
+            end = maxOf(start, end)
+        )
+    }
+    val currentRange = selectedPeriod.dateRange(
+        today = today,
+        customRange = customRange.takeIf { selectedPeriod == AnalyticsPeriod.CUSTOM }
+    )
+    val comparisonMonth = LocalDate.ofEpochDay(comparisonMonthEpochDay).withDayOfMonth(1)
+    val comparisonMonths = availableComparisonMonths(uiState.transactions, today)
+    val customMonths = availableMonthsUntil(
+        transactions = uiState.transactions,
+        latestMonth = today.withDayOfMonth(1)
+    )
+    val comparisonRange = selectedPeriod.comparisonRange(
+        today = today,
+        mode = comparisonMode,
+        selectedMonth = comparisonMonth,
+        currentRange = currentRange
+    )
+    val periodTransactions = transactionsInPeriod(
+        transactions = uiState.transactions,
+        period = selectedPeriod,
+        today = today,
+        customRange = customRange.takeIf { selectedPeriod == AnalyticsPeriod.CUSTOM }
+    )
+    val previousPeriodTransactions = transactionsInRange(
+        transactions = uiState.transactions,
+        range = comparisonRange
+    )
     val incomeInPeriod = periodTransactions
         .filter { it.type == TransactionType.INCOME.name }
         .sumOf { it.amountMinor }
@@ -2631,8 +2851,36 @@ private fun AnalyticsScreen(
         .filter { it.type == TransactionType.EXPENSE.name }
         .sumOf { it.amountMinor }
     val netInPeriod = incomeInPeriod - expensesInPeriod
+    val previousIncome = previousPeriodTransactions
+        .filter { it.type == TransactionType.INCOME.name }
+        .sumOf { it.amountMinor }
+    val previousExpenses = previousPeriodTransactions
+        .filter { it.type == TransactionType.EXPENSE.name }
+        .sumOf { it.amountMinor }
+    val previousNet = previousIncome - previousExpenses
     val categorySpending = categorySpendingForPeriod(periodTransactions)
     val maxCategorySpend = categorySpending.maxOfOrNull { it.amountMinor } ?: 0L
+    val selectedDate = selectedDateEpochDay?.let(LocalDate::ofEpochDay)
+    val selectedDayTransactions = selectedDate?.let { date ->
+        periodTransactions
+            .filter { it.dateEpochDay == date.toEpochDay() }
+            .sortedWith(compareByDescending<TransactionEntity> { it.type == TransactionType.EXPENSE.name }
+                .thenByDescending { it.id })
+    }
+    val selectedCategory = uiState.categories.firstOrNull { it.id == selectedCategoryId }
+    val selectedCategoryTransactions = if (showCategoryDetails) {
+        periodTransactions
+            .filter { it.categoryId == selectedCategoryId }
+            .sortedWith(compareByDescending<TransactionEntity> { it.dateEpochDay }
+                .thenByDescending { it.id })
+    } else {
+        emptyList()
+    }
+    val customPeriodLabel = if (customPeriodMode == AnalyticsCustomPeriodMode.WHOLE_MONTH) {
+        formatMonthYear(customMonth)
+    } else {
+        formatDateRange(customRange)
+    }
 
     Column(
         modifier = modifier
@@ -2655,7 +2903,15 @@ private fun AnalyticsScreen(
                 item(key = period.name) {
                     FilterChip(
                         selected = selectedPeriod == period,
-                        onClick = { selectedPeriodName = period.name },
+                        onClick = {
+                            selectedPeriodName = period.name
+                            comparisonModeName = AnalyticsComparisonMode.SAME_DURATION.name
+                            selectedDateEpochDay = null
+                            showCategoryDetails = false
+                            if (period == AnalyticsPeriod.CUSTOM) {
+                                showCustomPeriodOptions = true
+                            }
+                        },
                         label = { Text(stringResource(period.labelRes)) },
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
@@ -2665,6 +2921,25 @@ private fun AnalyticsScreen(
                         )
                     )
                 }
+            }
+        }
+
+        if (selectedPeriod == AnalyticsPeriod.CUSTOM) {
+            OutlinedButton(
+                onClick = { showCustomPeriodOptions = true },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DateRange,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = customPeriodLabel,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 
@@ -2726,7 +3001,13 @@ private fun AnalyticsScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = stringResource(selectedPeriod.labelRes),
+                        text = if (selectedPeriod == AnalyticsPeriod.CUSTOM) {
+                            customPeriodLabel
+                        } else {
+                            stringResource(selectedPeriod.labelRes)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2736,8 +3017,19 @@ private fun AnalyticsScreen(
                     transactions = periodTransactions,
                     emptyLabel = stringResource(R.string.analytics_placeholder),
                     period = selectedPeriod,
-                    areAmountsHidden = areAmountsHidden
+                    range = currentRange,
+                    areAmountsHidden = areAmountsHidden,
+                    selectedDate = selectedDate,
+                    onDateSelected = { selectedDateEpochDay = it.toEpochDay() }
                 )
+                if (expensesInPeriod > 0L && !areAmountsHidden) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.analytics_chart_tap_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = stringResource(R.string.transactions_count, periodTransactions.size),
@@ -2746,35 +3038,174 @@ private fun AnalyticsScreen(
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+        AnalyticsCategorySpendingCard(
+            categorySpending = categorySpending,
+            categories = uiState.categories,
+            maxCategorySpend = maxCategorySpend,
+            areAmountsHidden = areAmountsHidden,
+            onCategorySelected = {
+                selectedCategoryId = it
+                showCategoryDetails = true
+            }
+        )
+
+        AnalyticsComparisonCard(
+            period = selectedPeriod,
+            comparisonMode = comparisonMode,
+            onComparisonModeChanged = { comparisonModeName = it.name },
+            comparisonMonth = comparisonMonth,
+            onChooseComparisonMonth = { showComparisonMonthPicker = true },
+            currentRange = currentRange,
+            comparisonRange = comparisonRange,
+            currentIncome = incomeInPeriod,
+            previousIncome = previousIncome,
+            currentExpenses = expensesInPeriod,
+            previousExpenses = previousExpenses,
+            currentNet = netInPeriod,
+            previousNet = previousNet,
+            hasPreviousData = previousPeriodTransactions.isNotEmpty(),
+            areAmountsHidden = areAmountsHidden
+        )
+
+        AnalyticsInsightsCard(
+            range = currentRange,
+            expenses = expensesInPeriod,
+            spendingPoints = spendingPointsForPeriod(
+                transactions = periodTransactions,
+                period = selectedPeriod,
+                range = currentRange
+            ),
+            topCategory = categorySpending.firstOrNull(),
+            categories = uiState.categories,
+            areAmountsHidden = areAmountsHidden,
+            onHighestSpendingDaySelected = {
+                selectedDateEpochDay = it.toEpochDay()
+            }
+        )
+
+    }
+
+    if (showCustomPeriodOptions) {
+        AnalyticsCustomPeriodOptionsDialog(
+            onDismiss = { showCustomPeriodOptions = false },
+            onWholeMonthSelected = {
+                showCustomPeriodOptions = false
+                showCustomMonthPicker = true
+            },
+            onDateRangeSelected = {
+                showCustomPeriodOptions = false
+                showCustomRangePicker = true
+            }
+        )
+    }
+
+    if (showCustomMonthPicker) {
+        AnalyticsMonthPickerDialog(
+            titleRes = R.string.analytics_choose_analytics_month,
+            initialMonth = customMonth,
+            availableMonths = customMonths,
+            onDismiss = { showCustomMonthPicker = false },
+            onConfirm = { selectedMonth ->
+                customMonthEpochDay = selectedMonth.withDayOfMonth(1).toEpochDay()
+                customPeriodModeName = AnalyticsCustomPeriodMode.WHOLE_MONTH.name
+                showCustomMonthPicker = false
+            }
+        )
+    }
+
+    if (showCustomRangePicker) {
+        CustomTransactionDateRangeDialog(
+            initialStartEpochDay = customStartEpochDay,
+            initialEndEpochDay = customEndEpochDay,
+            onDismiss = { showCustomRangePicker = false },
+            onConfirm = { startEpochDay, endEpochDay ->
+                customStartEpochDay = minOf(startEpochDay, endEpochDay)
+                customEndEpochDay = maxOf(startEpochDay, endEpochDay)
+                customPeriodModeName = AnalyticsCustomPeriodMode.DATE_RANGE.name
+                showCustomRangePicker = false
+            }
+        )
+    }
+
+    if (showComparisonMonthPicker) {
+        AnalyticsMonthPickerDialog(
+            titleRes = R.string.analytics_choose_comparison_month,
+            initialMonth = comparisonMonth,
+            availableMonths = comparisonMonths,
+            onDismiss = { showComparisonMonthPicker = false },
+            onConfirm = { selectedMonth ->
+                comparisonMonthEpochDay = selectedMonth.withDayOfMonth(1).toEpochDay()
+                comparisonModeName = AnalyticsComparisonMode.SELECTED_MONTH.name
+                showComparisonMonthPicker = false
+            }
+        )
+    }
+
+    if (showCategoryDetails) {
+        AnalyticsCategoryDetailsSheet(
+            categoryName = selectedCategory?.let { categoryLabel(it) }
+                ?: stringResource(R.string.uncategorized),
+            transactions = selectedCategoryTransactions,
+            categories = uiState.categories,
+            areAmountsHidden = areAmountsHidden,
+            onDismiss = { showCategoryDetails = false }
+        )
+    }
+
+    selectedDate?.let { date ->
+        AnalyticsDayDetailsSheet(
+            date = date,
+            transactions = selectedDayTransactions.orEmpty(),
+            categories = uiState.categories,
+            areAmountsHidden = areAmountsHidden,
+            onDismiss = { selectedDateEpochDay = null }
+        )
+    }
+}
+
+@Composable
+private fun AnalyticsCategorySpendingCard(
+    categorySpending: List<CategorySpending>,
+    categories: List<CategoryEntity>,
+    maxCategorySpend: Long,
+    areAmountsHidden: Boolean,
+    onCategorySelected: (Long?) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = stringResource(R.string.spending_by_category),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            if (categorySpending.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.spending_by_category),
-                    style = MaterialTheme.typography.titleMedium
+                    text = stringResource(R.string.analytics_placeholder),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(14.dp))
-                if (categorySpending.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.analytics_placeholder),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else if (areAmountsHidden) {
-                    Text(
-                        text = stringResource(R.string.amounts_hidden_chart),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    categorySpending.take(5).forEachIndexed { index, spending ->
-                        val category = uiState.categories.firstOrNull {
-                            it.id == spending.categoryId
-                        }
-                        val label = category?.let { categoryLabel(it) }
-                            ?: stringResource(R.string.uncategorized)
+            } else if (areAmountsHidden) {
+                Text(
+                    text = stringResource(R.string.amounts_hidden_chart),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                categorySpending.take(5).forEachIndexed { index, spending ->
+                    val category = categories.firstOrNull { it.id == spending.categoryId }
+                    val label = category?.let { categoryLabel(it) }
+                        ?: stringResource(R.string.uncategorized)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                role = Role.Button,
+                                onClick = { onCategorySelected(spending.categoryId) }
+                            )
+                    ) {
                         Text(
                             text = label,
                             style = MaterialTheme.typography.labelLarge
@@ -2792,7 +3223,7 @@ private fun AnalyticsScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                    .fillMaxWidth(
+                                        .fillMaxWidth(
                                             (spending.amountMinor.toFloat() / maxCategorySpend)
                                                 .coerceIn(0.05f, 1f)
                                         )
@@ -2810,9 +3241,699 @@ private fun AnalyticsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (index < minOf(4, categorySpending.lastIndex)) {
-                            Spacer(modifier = Modifier.height(14.dp))
+                    }
+                    if (index < minOf(4, categorySpending.lastIndex)) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsCustomPeriodOptionsDialog(
+    onDismiss: () -> Unit,
+    onWholeMonthSelected: () -> Unit,
+    onDateRangeSelected: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.analytics_custom_period_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.analytics_custom_period_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Button(
+                    onClick = onWholeMonthSelected,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.DateRange,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.analytics_whole_month))
+                }
+                OutlinedButton(
+                    onClick = onDateRangeSelected,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.DateRange,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.analytics_custom_range))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun AnalyticsMonthPickerDialog(
+    titleRes: Int,
+    initialMonth: LocalDate,
+    availableMonths: List<LocalDate>,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDate) -> Unit
+) {
+    var selectedMonthEpochDay by rememberSaveable(initialMonth.toEpochDay()) {
+        mutableStateOf(initialMonth.toEpochDay())
+    }
+    val months = (availableMonths + initialMonth)
+        .distinctBy { it.toEpochDay() }
+        .sortedDescending()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(titleRes))
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(
+                    items = months,
+                    key = { it.toEpochDay() }
+                ) { month ->
+                    val isSelected = selectedMonthEpochDay == month.toEpochDay()
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                role = Role.RadioButton,
+                                onClick = { selectedMonthEpochDay = month.toEpochDay() }
+                            ),
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            Color.Transparent
                         }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedMonthEpochDay = month.toEpochDay()
+                                }
+                            )
+                            Text(
+                                text = formatMonthYear(month),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(LocalDate.ofEpochDay(selectedMonthEpochDay).withDayOfMonth(1))
+            }) {
+                Text(stringResource(R.string.select))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun AnalyticsComparisonCard(
+    period: AnalyticsPeriod,
+    comparisonMode: AnalyticsComparisonMode,
+    onComparisonModeChanged: (AnalyticsComparisonMode) -> Unit,
+    comparisonMonth: LocalDate,
+    onChooseComparisonMonth: () -> Unit,
+    currentRange: AnalyticsDateRange,
+    comparisonRange: AnalyticsDateRange,
+    currentIncome: Long,
+    previousIncome: Long,
+    currentExpenses: Long,
+    previousExpenses: Long,
+    currentNet: Long,
+    previousNet: Long,
+    hasPreviousData: Boolean,
+    areAmountsHidden: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = stringResource(R.string.analytics_comparison_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(
+                    R.string.analytics_comparison_subtitle,
+                    formatDateRange(currentRange),
+                    formatDateRange(comparisonRange)
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (period == AnalyticsPeriod.THIS_MONTH || period == AnalyticsPeriod.CUSTOM) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = stringResource(R.string.analytics_comparison_basis),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 4.dp)
+                ) {
+                    AnalyticsComparisonMode.entries.forEach { mode ->
+                        item(key = mode.name) {
+                            FilterChip(
+                                selected = comparisonMode == mode,
+                                onClick = { onComparisonModeChanged(mode) },
+                                label = { Text(stringResource(mode.labelRes)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        .copy(alpha = 0.55f),
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                    }
+                }
+                if (comparisonMode == AnalyticsComparisonMode.PREVIOUS_MONTH) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.analytics_previous_month_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (comparisonMode == AnalyticsComparisonMode.SELECTED_MONTH) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onChooseComparisonMonth,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DateRange,
+                            contentDescription = null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(formatMonthYear(comparisonMonth))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.analytics_selected_month_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AnalyticsComparisonRow(
+                label = stringResource(R.string.expenses_in_period),
+                currentLabel = stringResource(R.string.analytics_current_period),
+                previousLabel = stringResource(R.string.analytics_comparison_period),
+                currentValue = currentExpenses,
+                previousValue = previousExpenses,
+                hasPreviousData = hasPreviousData,
+                areAmountsHidden = areAmountsHidden,
+                accentColor = MaterialTheme.colorScheme.tertiary
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
+            AnalyticsComparisonRow(
+                label = stringResource(R.string.income_in_period),
+                currentLabel = stringResource(R.string.analytics_current_period),
+                previousLabel = stringResource(R.string.analytics_comparison_period),
+                currentValue = currentIncome,
+                previousValue = previousIncome,
+                hasPreviousData = hasPreviousData,
+                areAmountsHidden = areAmountsHidden,
+                accentColor = MaterialTheme.colorScheme.secondary
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp))
+            AnalyticsComparisonRow(
+                label = stringResource(R.string.net_in_period),
+                currentLabel = stringResource(R.string.analytics_current_period),
+                previousLabel = stringResource(R.string.analytics_comparison_period),
+                currentValue = currentNet,
+                previousValue = previousNet,
+                hasPreviousData = hasPreviousData,
+                areAmountsHidden = areAmountsHidden,
+                accentColor = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsComparisonRow(
+    label: String,
+    currentLabel: String,
+    previousLabel: String,
+    currentValue: Long,
+    previousValue: Long,
+    hasPreviousData: Boolean,
+    areAmountsHidden: Boolean,
+    accentColor: Color
+) {
+    val difference = currentValue - previousValue
+    val differenceColor = when {
+        difference > 0L -> accentColor
+        difference < 0L -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = accentColor
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ComparisonValue(
+                modifier = Modifier.weight(1f),
+                label = currentLabel,
+                value = currentValue,
+                areAmountsHidden = areAmountsHidden,
+                valueColor = MaterialTheme.colorScheme.onSurface
+            )
+            ComparisonValue(
+                modifier = Modifier.weight(1f),
+                label = previousLabel,
+                value = previousValue,
+                areAmountsHidden = areAmountsHidden,
+                valueColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (areAmountsHidden) {
+            Text(
+                text = stringResource(R.string.amounts_hidden_chart),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (!hasPreviousData) {
+            Text(
+                text = stringResource(R.string.analytics_change_no_baseline),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val absoluteDifference = difference.absoluteValue
+            val percentage = percentageChange(currentValue, previousValue)
+            val changeText = when {
+                difference == 0L -> stringResource(R.string.analytics_change_same)
+                previousValue == 0L -> stringResource(
+                    if (difference > 0L) {
+                        R.string.analytics_change_more_without_percentage
+                    } else {
+                        R.string.analytics_change_less_without_percentage
+                    },
+                    formatMoney(absoluteDifference)
+                )
+                difference > 0L -> stringResource(
+                    R.string.analytics_change_more,
+                    formatMoney(absoluteDifference),
+                    percentage
+                )
+                else -> stringResource(
+                    R.string.analytics_change_less,
+                    formatMoney(absoluteDifference),
+                    percentage
+                )
+            }
+            Text(
+                text = changeText,
+                style = MaterialTheme.typography.labelSmall,
+                color = differenceColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComparisonValue(
+    label: String,
+    value: Long,
+    areAmountsHidden: Boolean,
+    valueColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = formatMoney(value),
+            modifier = Modifier.amountBlur(areAmountsHidden),
+            style = MaterialTheme.typography.titleMedium,
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun AnalyticsInsightsCard(
+    range: AnalyticsDateRange,
+    expenses: Long,
+    spendingPoints: List<SpendingPoint>,
+    topCategory: CategorySpending?,
+    categories: List<CategoryEntity>,
+    areAmountsHidden: Boolean,
+    onHighestSpendingDaySelected: (LocalDate) -> Unit
+) {
+    val dailyAverage = if (range.dayCount > 0) {
+        expenses / range.dayCount.toLong()
+    } else {
+        0L
+    }
+    val highestSpendingDay = spendingPoints
+        .filter { it.amountMinor > 0L }
+        .maxByOrNull { it.amountMinor }
+    val topCategoryLabel = topCategory?.let { spending ->
+        categories.firstOrNull { it.id == spending.categoryId }?.let { categoryLabel(it) }
+            ?: stringResource(R.string.uncategorized)
+    } ?: stringResource(R.string.analytics_no_data)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = stringResource(R.string.analytics_insights_title),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            AnalyticsInsightRow(
+                icon = Icons.Outlined.ArrowDownward,
+                label = stringResource(R.string.analytics_average_daily_spending),
+                value = formatMoney(dailyAverage),
+                valueBlurred = areAmountsHidden
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            AnalyticsInsightRow(
+                icon = Icons.Outlined.DateRange,
+                label = stringResource(R.string.analytics_highest_spending_day),
+                value = highestSpendingDay?.let {
+                    stringResource(
+                        R.string.analytics_day_and_amount,
+                        formatDate(it.date.toEpochDay()),
+                        formatMoney(it.amountMinor)
+                    )
+                } ?: stringResource(R.string.analytics_no_data),
+                valueBlurred = areAmountsHidden && highestSpendingDay != null,
+                onClick = highestSpendingDay?.date?.let { date ->
+                    { onHighestSpendingDaySelected(date) }
+                }
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            AnalyticsInsightRow(
+                icon = Icons.Outlined.Category,
+                label = stringResource(R.string.analytics_top_category),
+                value = topCategoryLabel,
+                valueBlurred = false
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsInsightRow(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    valueBlurred: Boolean,
+    onClick: (() -> Unit)? = null
+) {
+    val rowModifier = if (onClick == null) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+    }
+
+    Row(
+        modifier = rowModifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(34.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = value,
+            modifier = Modifier.amountBlur(valueBlurred),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnalyticsCategoryDetailsSheet(
+    categoryName: String,
+    transactions: List<TransactionEntity>,
+    categories: List<CategoryEntity>,
+    areAmountsHidden: Boolean,
+    onDismiss: () -> Unit
+) {
+    val expenseTotal = transactions.sumOf { it.amountMinor }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Category,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(
+                            R.string.analytics_category_transactions_title,
+                            categoryName
+                        ),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = if (areAmountsHidden) {
+                            stringResource(
+                                R.string.analytics_category_total_hidden,
+                                transactions.size
+                            )
+                        } else {
+                            stringResource(
+                                R.string.analytics_category_total,
+                                transactions.size,
+                                formatMoney(expenseTotal)
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (transactions.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.analytics_no_transactions_category),
+                    modifier = Modifier.padding(vertical = 20.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(
+                        items = transactions,
+                        key = { it.id }
+                    ) { transaction ->
+                        CompactTransactionRow(
+                            transaction = transaction,
+                            category = categories.firstOrNull {
+                                it.id == transaction.categoryId
+                            },
+                            areAmountsHidden = areAmountsHidden
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AnalyticsDayDetailsSheet(
+    date: LocalDate,
+    transactions: List<TransactionEntity>,
+    categories: List<CategoryEntity>,
+    areAmountsHidden: Boolean,
+    onDismiss: () -> Unit
+) {
+    val expenseTotal = transactions
+        .filter { it.type == TransactionType.EXPENSE.name }
+        .sumOf { it.amountMinor }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.DateRange,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(
+                            R.string.analytics_day_transactions_title,
+                            formatDate(date.toEpochDay())
+                        ),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = if (areAmountsHidden) {
+                            stringResource(
+                                R.string.analytics_day_total_hidden,
+                                transactions.size
+                            )
+                        } else {
+                            stringResource(
+                                R.string.analytics_day_total,
+                                transactions.size,
+                                formatMoney(expenseTotal)
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (transactions.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.analytics_no_transactions_day),
+                    modifier = Modifier.padding(vertical = 20.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(
+                        items = transactions,
+                        key = { it.id }
+                    ) { transaction ->
+                        CompactTransactionRow(
+                            transaction = transaction,
+                            category = categories.firstOrNull {
+                                it.id == transaction.categoryId
+                            },
+                            areAmountsHidden = areAmountsHidden
+                        )
                     }
                 }
             }
@@ -3503,6 +4624,9 @@ private fun formatDate(epochDay: Long): String =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
         .withLocale(Locale.getDefault())
         .format(LocalDate.ofEpochDay(epochDay))
+
+private fun formatMonthYear(date: LocalDate): String =
+    DateTimeFormatter.ofPattern("LLLL yyyy", Locale.getDefault()).format(date)
 
 private fun Long.toDatePickerMillis(): Long =
     LocalDate.ofEpochDay(this)
