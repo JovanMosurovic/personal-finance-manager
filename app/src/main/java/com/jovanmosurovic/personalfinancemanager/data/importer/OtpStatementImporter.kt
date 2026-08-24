@@ -4,6 +4,7 @@ import android.content.Context
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.jovanmosurovic.personalfinancemanager.domain.model.KnownOtpAccounts
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.io.InputStream
 import java.math.BigDecimal
@@ -217,8 +218,25 @@ class OtpStatementImporter {
         date: LocalDate,
         bodyTokens: List<String>
     ): OtpParsedTransaction? {
-        val incoming = bodyTokens.getOrNull(0)?.let(::parseAmountMinor) ?: return null
-        val outgoing = bodyTokens.getOrNull(1)?.let(::parseAmountMinor) ?: return null
+        val firstAmount = bodyTokens.getOrNull(0)?.let(::parseAmountMinor) ?: return null
+        val secondAmount = bodyTokens.getOrNull(1)?.let(::parseAmountMinor)
+        if (secondAmount == null) {
+            val description = bodyTokens.drop(1).joinToString(" ").cleanText()
+            val type = if (looksLikeIncome(description)) {
+                TransactionType.INCOME
+            } else {
+                TransactionType.EXPENSE
+            }
+            return createParsedTransaction(
+                type = type,
+                amountMinor = firstAmount.absoluteValue,
+                description = description,
+                date = date
+            )
+        }
+
+        val incoming = firstAmount
+        val outgoing = secondAmount
         val descriptionTokens = bodyTokens.drop(2).toMutableList()
         val balanceIndex = descriptionTokens.indexOfLast(::isMoneyToken)
         if (balanceIndex >= 0) descriptionTokens.removeAt(balanceIndex)
@@ -370,6 +388,9 @@ class OtpStatementImporter {
         return normalized.contains("otp banka") ||
             normalized.contains("e-mail:") ||
             normalized.contains("website:") ||
+            normalized.contains("datum i vreme štampe") ||
+            normalized.contains("www.otpbanka.rs") ||
+            normalized.matches(Regex(".*\\b[123]\\s+od\\s+[123]\\b.*")) ||
             normalized.matches(Regex(".*\\b[123]/[123]\\b.*"))
     }
 
@@ -391,7 +412,8 @@ class OtpStatementImporter {
             "M-BANKING PRILIV",
             "PRILIV",
             "PLATA",
-            "JETBRAINS"
+            "JETBRAINS",
+            KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT
         ).any(normalized::contains)
     }
 

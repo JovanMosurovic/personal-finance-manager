@@ -30,6 +30,7 @@ class FinanceRepository(
             if (database.keywordRuleDao().count() == 0) {
                 database.keywordRuleDao().insertAll(DefaultFinanceData.keywordRules)
             }
+            reclassifyUncategorizedInternal()
         }
     }
 
@@ -309,6 +310,8 @@ class FinanceRepository(
     ): Boolean {
         val normalizedKeyword = rule.keyword.normalizeForMatching()
         return when (rule.matchMode) {
+            "EXACT" -> normalizedMerchant == normalizedKeyword
+
             "WHOLE_WORD" -> normalizedMerchant
                 .split(Regex("[^A-Z0-9]+"))
                 .any { token -> token == normalizedKeyword }
@@ -338,4 +341,10 @@ private fun String.normalizeForMatching(): String = uppercase(Locale.ROOT)
     .replace('Š', 'S')
     .replace('Đ', 'D')
     .replace(Regex("\\s+"), " ")
+    .trim()
+    .replace(
+        Regex("\\s+(?:DATUM I VREME STAMPE|WWW\\.OTPBANKA\\.RS|VASA OTP BANKA|[123] OD [123]).*"),
+        ""
+    )
+    .replace(Regex("\\s+\\d{1,3}(?:[.]\\d{3})+[,]\\d{2}$"), "")
     .trim()

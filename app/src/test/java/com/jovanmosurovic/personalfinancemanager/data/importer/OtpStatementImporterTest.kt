@@ -76,4 +76,49 @@ class OtpStatementImporterTest {
         assertEquals(95000L, transactions.single().amountMinor)
         assertEquals("GLOVOAPP BEOGRAD", transactions.single().merchant)
     }
+
+    @Test
+    fun parsesOtpVirtualCardTransferDescription() {
+        val text = """
+            05.07.2026 05.07.2026 0,00 5.000,00 Prenos u korist 9120726623676 194.323,71
+            28.07.2026 28.07.2026 0,00 6.000,00 m-Banking prenos u korist 9300706420629 (ib-mobile) 420.182,81
+            Datum i vreme štampe: 07.08.2026. 16:16:09
+            www.otpbanka.rs
+            2 od 3
+            Vaša OTP banka Srbija Info center: 021 421 077
+        """.trimIndent()
+
+        val transactions = importer.parsePdfText(text)
+
+        assertEquals(2, transactions.size)
+        assertEquals("Prenos u korist 9120726623676", transactions[0].merchant)
+        assertEquals("m-Banking prenos u korist 9300706420629 (ib-mobile)", transactions[1].merchant)
+    }
+
+    @Test
+    fun parsesAccountOverviewWithSingleAmountColumn() {
+        val text = """
+            Datum valute Datum obrade Isplate Uplate Opis
+            20.07.2026 20.07.2026 5,000.00 Interni prenos sa računa
+            325930070633456009 na račun 325912072662367691
+            08.07.2026 08.07.2026 254,589.65 JETBRAINS D.O.O. ZARADA ZA 06.2026
+            02.07.2026 02.07.2026 3,000.00 VIOLETA DAMNJANOVIĆ,
+            Transakcije po nalogu građana, 9300500124019
+            OTP banka Srbija 1/1
+        """.trimIndent()
+
+        val transactions = importer.parsePdfText(text)
+
+        assertEquals(3, transactions.size)
+        assertEquals(TransactionType.EXPENSE, transactions[0].type)
+        assertEquals(500000L, transactions[0].amountMinor)
+        assertEquals(
+            "Interni prenos sa računa 325930070633456009 na račun 325912072662367691",
+            transactions[0].merchant
+        )
+        assertEquals(TransactionType.INCOME, transactions[1].type)
+        assertEquals(25458965L, transactions[1].amountMinor)
+        assertEquals(TransactionType.INCOME, transactions[2].type)
+        assertEquals(300000L, transactions[2].amountMinor)
+    }
 }

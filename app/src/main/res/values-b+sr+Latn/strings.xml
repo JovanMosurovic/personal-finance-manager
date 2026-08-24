@@ -122,6 +122,10 @@
     <string name="assign_category">Dodeli kategoriju</string>
     <string name="select_category">Izaberite kategoriju</string>
     <string name="transaction_details">Detalji transakcije</string>
+    <string name="transaction_name">Naziv transakcije</string>
+    <string name="original_description">Originalni opis</string>
+    <string name="show_original_description">Prikaži originalni opis</string>
+    <string name="hide_original_description">Sakrij originalni opis</string>
     <string name="edit_transaction">Izmeni transakciju</string>
     <string name="delete_transaction">Obriši transakciju</string>
     <string name="delete_transaction_title">Obrisati transakciju?</string>
@@ -212,4 +216,7 @@
     <string name="category_leisure">Slobodno vreme</string>
     <string name="category_entertainment">Zabava</string>
     <string name="category_subscriptions">Pretplate</string>
+    <string name="category_online_payments">Online plaćanja</string>
+    <string name="category_virtual_card">Virtual card</string>
+    <string name="category_transfers">Transferi</string>
 </resources>

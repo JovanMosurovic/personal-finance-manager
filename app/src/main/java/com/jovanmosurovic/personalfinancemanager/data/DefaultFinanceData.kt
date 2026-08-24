@@ -2,6 +2,7 @@ package com.jovanmosurovic.personalfinancemanager.data
 
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
+import com.jovanmosurovic.personalfinancemanager.domain.model.KnownOtpAccounts
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 
 object DefaultFinanceData {
@@ -38,6 +39,10 @@ object DefaultFinanceData {
     const val ENTERTAINMENT = 701L
     const val SUBSCRIPTIONS = 702L
 
+    const val ONLINE_PAYMENTS = 800L
+    const val VIRTUAL_CARD = 801L
+    const val TRANSFERS = 900L
+
     val categories = listOf(
         category(FOOD, "category_food"),
         category(GROCERIES, "category_groceries", FOOD),
@@ -64,7 +69,10 @@ object DefaultFinanceData {
         category(HOME, "category_home", SHOPPING),
         category(LEISURE, "category_leisure"),
         category(ENTERTAINMENT, "category_entertainment", LEISURE),
-        category(SUBSCRIPTIONS, "category_subscriptions", LEISURE)
+        category(SUBSCRIPTIONS, "category_subscriptions", LEISURE),
+        category(ONLINE_PAYMENTS, "category_online_payments"),
+        category(VIRTUAL_CARD, "category_virtual_card", ONLINE_PAYMENTS),
+        category(TRANSFERS, "category_transfers")
     )
 
     val keywordRules = buildList {
@@ -103,6 +111,17 @@ object DefaultFinanceData {
         addRules("EXP - Auto / Registracija", REGISTRATION, TransactionType.EXPENSE, "GC GROUP")
         addRules("EXP - Slobodno vreme / Pretplate - Apple i Google", SUBSCRIPTIONS, TransactionType.EXPENSE,
             "ITUNES.COM", "GOOGLE GOOGLE ONE")
+        addExactRules("EXP - Online plaćanja / Virtuelna kartica - Dopuna", VIRTUAL_CARD,
+            TransactionType.EXPENSE,
+            "PRENOS U KORIST ${KnownOtpAccounts.LEGACY_VIRTUAL_CARD_ACCOUNT}",
+            "INTERNI PRENOS SA RACUNA ${KnownOtpAccounts.CURRENT_ACCOUNT} " +
+                "NA RACUN ${KnownOtpAccounts.VIRTUAL_CARD_ACCOUNT}")
+        addAnyRules("Transfers - Filip i Violeta", TRANSFERS,
+            "PRENOS U KORIST ${KnownOtpAccounts.FILIP_PETROVIC_ACCOUNT}",
+            "PRENOS U KORIST ${KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT}",
+            "PRILIV SA RACUNA ${KnownOtpAccounts.FILIP_PETROVIC_ACCOUNT}",
+            "PRILIV SA RACUNA ${KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT}",
+            KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT)
     }.flatten()
 
     private fun category(id: Long, nameKey: String, parentId: Long? = null) =
@@ -122,6 +141,39 @@ object DefaultFinanceData {
                 transactionType = type.name,
                 priority = if (keyword.length <= 3) 10 else 0,
                 matchMode = if (keyword.length <= 3) "WHOLE_WORD" else "CONTAINS"
+            )
+        })
+    }
+
+    private fun MutableList<List<KeywordRuleEntity>>.addExactRules(
+        name: String,
+        categoryId: Long,
+        type: TransactionType,
+        vararg keywords: String
+    ) {
+        add(keywords.map { keyword ->
+            KeywordRuleEntity(
+                name = name,
+                keyword = keyword,
+                categoryId = categoryId,
+                transactionType = type.name,
+                matchMode = "EXACT"
+            )
+        })
+    }
+
+    private fun MutableList<List<KeywordRuleEntity>>.addAnyRules(
+        name: String,
+        categoryId: Long,
+        vararg keywords: String
+    ) {
+        add(keywords.map { keyword ->
+            KeywordRuleEntity(
+                name = name,
+                keyword = keyword,
+                categoryId = categoryId,
+                transactionType = "ANY",
+                matchMode = "CONTAINS"
             )
         })
     }

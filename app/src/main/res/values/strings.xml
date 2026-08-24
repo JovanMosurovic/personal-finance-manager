@@ -121,6 +121,10 @@
     <string name="assign_category">Assign category</string>
     <string name="select_category">Select a category</string>
     <string name="transaction_details">Transaction details</string>
+    <string name="transaction_name">Transaction name</string>
+    <string name="original_description">Original description</string>
+    <string name="show_original_description">Show original description</string>
+    <string name="hide_original_description">Hide original description</string>
     <string name="edit_transaction">Edit transaction</string>
     <string name="delete_transaction">Delete transaction</string>
     <string name="delete_transaction_title">Delete transaction?</string>
@@ -209,4 +213,7 @@
     <string name="category_leisure">Leisure</string>
     <string name="category_entertainment">Entertainment</string>
     <string name="category_subscriptions">Subscriptions</string>
+    <string name="category_online_payments">Online payments</string>
+    <string name="category_virtual_card">Virtual card</string>
+    <string name="category_transfers">Transfers</string>
 </resources>

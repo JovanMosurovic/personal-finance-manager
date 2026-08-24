@@ -142,6 +142,7 @@ import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntit
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
 import com.jovanmosurovic.personalfinancemanager.data.importer.OtpImportFormat
+import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionNameFormatter
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -1070,7 +1071,7 @@ private fun CompactTransactionRow(
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = transaction.merchant,
+                text = TransactionNameFormatter.displayName(transaction.merchant),
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1
             )
@@ -1832,6 +1833,8 @@ private fun filterTransactions(
     return transactions.filter { transaction ->
         val matchesSearch = normalizedQuery.isBlank() ||
             transaction.merchant.contains(normalizedQuery, ignoreCase = true) ||
+            TransactionNameFormatter.displayName(transaction.merchant)
+                .contains(normalizedQuery, ignoreCase = true) ||
             transaction.note.contains(normalizedQuery, ignoreCase = true)
 
         val matchesType = when (typeFilter) {
@@ -1905,6 +1908,10 @@ private fun TransactionDetailsDialog(
     onDelete: () -> Unit
 ) {
     val isIncome = transaction.type == TransactionType.INCOME.name
+    val displayName = TransactionNameFormatter.displayName(transaction.merchant)
+    val sourceDescription = TransactionNameFormatter.sourceDescription(transaction.merchant)
+    val hasOriginalDescription = displayName != sourceDescription
+    var showOriginalDescription by remember(transaction.id) { mutableStateOf(false) }
     val amountColor = if (isIncome) {
         MaterialTheme.colorScheme.secondary
     } else {
@@ -1917,119 +1924,154 @@ private fun TransactionDetailsDialog(
             Text(stringResource(R.string.transaction_details))
         },
         text = {
-            Column(
+            Box(
                 modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .heightIn(max = 480.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
                     ) {
-                        TransactionBadge(transaction = transaction, color = amountColor)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TransactionBadge(transaction = transaction, color = amountColor)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.transaction_name),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = displayName,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = formatMoney(
+                                        if (isIncome) transaction.amountMinor else -transaction.amountMinor
+                                    ),
+                                    modifier = Modifier.amountBlur(areAmountsHidden),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = amountColor,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    if (hasOriginalDescription) {
+                        TextButton(
+                            onClick = { showOriginalDescription = !showOriginalDescription },
+                            modifier = Modifier.align(Alignment.Start),
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
                             Text(
-                                text = transaction.merchant,
-                                style = MaterialTheme.typography.titleLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = stringResource(
+                                    if (showOriginalDescription) {
+                                        R.string.hide_original_description
+                                    } else {
+                                        R.string.show_original_description
+                                    }
+                                )
                             )
-                            Text(
-                                text = formatMoney(
-                                    if (isIncome) transaction.amountMinor else -transaction.amountMinor
-                                ),
-                                modifier = Modifier.amountBlur(areAmountsHidden),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = amountColor,
-                                maxLines = 1
+                        }
+                        if (showOriginalDescription) {
+                            TransactionDetailRow(
+                                label = stringResource(R.string.original_description),
+                                value = sourceDescription
                             )
                         }
                     }
-                }
 
-                HorizontalDivider()
-                TransactionDetailRow(
-                    label = stringResource(R.string.date_label),
-                    value = formatDate(transaction.dateEpochDay)
-                )
-                TransactionDetailRow(
-                    label = stringResource(R.string.category),
-                    value = category?.let { categoryLabel(it) }
-                        ?: stringResource(R.string.no_category_assigned)
-                )
-                if (transaction.note.isNotBlank()) {
+                    HorizontalDivider()
                     TransactionDetailRow(
-                        label = stringResource(R.string.note),
-                        value = transaction.note
+                        label = stringResource(R.string.date_label),
+                        value = formatDate(transaction.dateEpochDay)
                     )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(top = 2.dp))
-                OutlinedButton(
-                    onClick = onAssignCategory,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    TransactionDetailRow(
+                        label = stringResource(R.string.category),
+                        value = category?.let { categoryLabel(it) }
+                            ?: stringResource(R.string.no_category_assigned)
                     )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Category,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = stringResource(R.string.change_category),
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelLarge
+                    if (transaction.note.isNotBlank()) {
+                        TransactionDetailRow(
+                            label = stringResource(R.string.note),
+                            value = transaction.note
                         )
                     }
-                }
-                OutlinedButton(
-                    onClick = onDelete,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
-                    )
-                ) {
-                    Row(
+
+                    HorizontalDivider(modifier = Modifier.padding(top = 2.dp))
+                    OutlinedButton(
+                        onClick = onAssignCategory,
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                        )
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = null
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Category,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = stringResource(R.string.change_category),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onDelete,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.55f)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = stringResource(R.string.delete),
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = stringResource(R.string.delete),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
                     }
                 }
             }
@@ -2298,7 +2340,7 @@ private fun TransactionRow(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = transaction.merchant,
+                    text = TransactionNameFormatter.displayName(transaction.merchant),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2389,7 +2431,7 @@ private fun CategoryAssignmentDialog(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = transaction.merchant,
+                                text = TransactionNameFormatter.displayName(transaction.merchant),
                                 style = MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -3406,14 +3448,30 @@ private fun AnalyticsScreen(
                 label = stringResource(R.string.income_in_period),
                 value = formatMoney(incomeInPeriod),
                 accentColor = MaterialTheme.colorScheme.secondary,
-                valueBlurred = areAmountsHidden
+                valueBlurred = areAmountsHidden,
+                onClick = {
+                    onViewAllTransactions(
+                        null,
+                        TransactionTypeFilter.INCOME,
+                        currentRange.start.toEpochDay(),
+                        currentRange.end.toEpochDay()
+                    )
+                }
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.expenses_in_period),
                 value = formatMoney(expensesInPeriod),
                 accentColor = MaterialTheme.colorScheme.tertiary,
-                valueBlurred = areAmountsHidden
+                valueBlurred = areAmountsHidden,
+                onClick = {
+                    onViewAllTransactions(
+                        null,
+                        TransactionTypeFilter.EXPENSE,
+                        currentRange.start.toEpochDay(),
+                        currentRange.end.toEpochDay()
+                    )
+                }
             )
         }
 
@@ -5094,6 +5152,9 @@ private fun categoryLabelRes(nameKey: String): Int = when (nameKey) {
     "category_leisure" -> R.string.category_leisure
     "category_entertainment" -> R.string.category_entertainment
     "category_subscriptions" -> R.string.category_subscriptions
+    "category_online_payments" -> R.string.category_online_payments
+    "category_virtual_card" -> R.string.category_virtual_card
+    "category_transfers" -> R.string.category_transfers
     else -> R.string.uncategorized
 }
 
