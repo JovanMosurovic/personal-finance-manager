@@ -30,6 +30,9 @@
     <string name="transactions_title">Transakcije</string>
     <string name="search_transactions_hint">Pretražite prodavca ili belešku</string>
     <string name="clear_search">Obriši pretragu</string>
+    <string name="back">Nazad</string>
+    <string name="main_category">Glavna kategorija</string>
+    <string name="open_subcategories">Otvori podkategorije</string>
     <string name="filter_type_all">Svi tipovi</string>
     <string name="filter_category_all">Sve kategorije</string>
     <string name="filter_period_all">Svi datumi</string>

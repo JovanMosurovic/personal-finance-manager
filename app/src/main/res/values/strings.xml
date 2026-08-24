@@ -29,6 +29,9 @@
     <string name="transactions_title">Transactions</string>
     <string name="search_transactions_hint">Search merchant or note</string>
     <string name="clear_search">Clear search</string>
+    <string name="back">Back</string>
+    <string name="main_category">Main category</string>
+    <string name="open_subcategories">Open subcategories</string>
     <string name="filter_type_all">All types</string>
     <string name="filter_category_all">All categories</string>
     <string name="filter_period_all">All time</string>

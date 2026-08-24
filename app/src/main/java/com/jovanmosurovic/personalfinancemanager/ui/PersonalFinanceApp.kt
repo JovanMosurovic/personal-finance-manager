@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -2346,6 +2347,18 @@ private fun CategoryAssignmentDialog(
     val categoriesById = remember(categories) {
         categories.associateBy { it.id }
     }
+    val topLevelCategories = remember(categories) {
+        categories.filter { it.parentId == null }
+    }
+    val childrenByParentId = remember(categories) {
+        categories
+            .filter { it.parentId != null }
+            .groupBy { it.parentId }
+    }
+    val initialExpandedParentId = categoriesById[transaction.categoryId]?.parentId
+    var expandedParentCategoryId by rememberSaveable(transaction.id) {
+        mutableStateOf(initialExpandedParentId)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2394,11 +2407,13 @@ private fun CategoryAssignmentDialog(
                     }
                 }
 
-                Text(
-                    text = stringResource(R.string.select_category),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (expandedParentCategoryId == null) {
+                    Text(
+                        text = stringResource(R.string.select_category),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -2410,49 +2425,80 @@ private fun CategoryAssignmentDialog(
                         contentPadding = PaddingValues(4.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        items(categories, key = { it.id }) { category ->
-                            val parent = categoriesById[category.parentId]
-                            val isSelected = selectedCategoryId == category.id
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedCategoryId = category.id },
-                                shape = MaterialTheme.shapes.small,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
-                                } else {
-                                    Color.Transparent
-                                }
-                            ) {
+                        if (expandedParentCategoryId == null) {
+                            items(
+                                items = topLevelCategories,
+                                key = { it.id },
+                                contentType = { "top_level_category" }
+                            ) { category ->
+                                val children = childrenByParentId[category.id].orEmpty()
+                                CategoryAssignmentOption(
+                                    category = category,
+                                    selected = selectedCategoryId == category.id,
+                                    hasChildren = children.isNotEmpty(),
+                                    onClick = {
+                                        if (children.isEmpty()) {
+                                            selectedCategoryId = category.id
+                                        } else {
+                                            expandedParentCategoryId = category.id
+                                        }
+                                    },
+                                    onSelect = { selectedCategoryId = category.id },
+                                    onExpand = children.takeIf { it.isNotEmpty() }?.let {
+                                        { expandedParentCategoryId = category.id }
+                                    }
+                                )
+                            }
+                        } else {
+                            val parentCategory = categoriesById[expandedParentCategoryId]
+                            val children = childrenByParentId[expandedParentCategoryId].orEmpty()
+
+                            item {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { selectedCategoryId = category.id }
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = categoryLabel(category),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                    IconButton(
+                                        onClick = { expandedParentCategoryId = null }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                            contentDescription = stringResource(R.string.back)
                                         )
-                                        if (parent != null) {
-                                            Text(
-                                                text = categoryLabel(parent),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
                                     }
+                                    Text(
+                                        text = parentCategory?.let { categoryLabel(it) }.orEmpty(),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
+                            }
+                            parentCategory?.let { category ->
+                                item(key = category.id, contentType = "parent_category") {
+                                    CategoryAssignmentOption(
+                                        category = category,
+                                        selected = selectedCategoryId == category.id,
+                                        subtitle = stringResource(R.string.main_category),
+                                        onClick = { selectedCategoryId = category.id },
+                                        onSelect = { selectedCategoryId = category.id }
+                                    )
+                                }
+                            }
+                            items(
+                                items = children,
+                                key = { it.id },
+                                contentType = { "subcategory" }
+                            ) { category ->
+                                CategoryAssignmentOption(
+                                    category = category,
+                                    selected = selectedCategoryId == category.id,
+                                    onClick = { selectedCategoryId = category.id },
+                                    onSelect = { selectedCategoryId = category.id }
+                                )
                             }
                         }
                     }
@@ -2496,6 +2542,67 @@ private fun CategoryAssignmentDialog(
             }
         }
     )
+}
+
+@Composable
+private fun CategoryAssignmentOption(
+    category: CategoryEntity,
+    selected: Boolean,
+    subtitle: String? = null,
+    hasChildren: Boolean = false,
+    onClick: () -> Unit,
+    onSelect: () -> Unit,
+    onExpand: (() -> Unit)? = null
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+        } else {
+            Color.Transparent
+        }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = selected,
+                onClick = onSelect
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = categoryLabel(category),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (hasChildren && onExpand != null) {
+                IconButton(onClick = onExpand) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.open_subcategories)
+                    )
+                }
+            }
+        }
+    }
 }
 
 private data class CategoryEditorState(
