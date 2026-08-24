@@ -34,8 +34,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -1191,9 +1191,10 @@ private fun TransactionsScreen(
     val selectedTypeFilter = TransactionTypeFilter.entries.firstOrNull {
         it.name == selectedTypeFilterName
     } ?: TransactionTypeFilter.ALL
-    val selectedCategory = uiState.categories.firstOrNull {
-        it.id == selectedCategoryId
+    val categoriesById = remember(uiState.categories) {
+        uiState.categories.associateBy { it.id }
     }
+    val selectedCategory = categoriesById[selectedCategoryId]
     val today = LocalDate.now()
     val selectedMonth = LocalDate.ofEpochDay(selectedMonthEpochDay).withDayOfMonth(1)
     val transactionMonths = remember(uiState.transactions, today) {
@@ -1219,8 +1220,8 @@ private fun TransactionsScreen(
     val selectedSort = TransactionSort.entries.firstOrNull {
         it.name == selectedSortName
     } ?: TransactionSort.NEWEST
-    val uncategorizedTransactions = remember(uiState.transactions) {
-        uiState.transactions.filter { it.categoryId == null }
+    val uncategorizedCount = remember(uiState.transactions) {
+        uiState.transactions.count { it.categoryId == null }
     }
     val filteredTransactions = remember(
         uiState.transactions,
@@ -1367,7 +1368,7 @@ private fun TransactionsScreen(
                                 selectedCategoryId == UNCATEGORIZED_FILTER -> {
                                     stringResource(
                                         R.string.uncategorized_count,
-                                        uncategorizedTransactions.size
+                                        uncategorizedCount
                                     )
                                 }
                                 selectedCategory != null -> categoryLabel(selectedCategory)
@@ -1390,7 +1391,7 @@ private fun TransactionsScreen(
                                         Text(
                                             stringResource(
                                                 R.string.uncategorized_count,
-                                                uncategorizedTransactions.size
+                                                uncategorizedCount
                                             )
                                         )
                                     },
@@ -1409,9 +1410,7 @@ private fun TransactionsScreen(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 category.parentId?.let { parentId ->
-                                                    uiState.categories.firstOrNull {
-                                                        it.id == parentId
-                                                    }?.let { parent ->
+                                                    categoriesById[parentId]?.let { parent ->
                                                         Text(
                                                             text = categoryLabel(parent),
                                                             style = MaterialTheme.typography.labelSmall,
@@ -1514,9 +1513,7 @@ private fun TransactionsScreen(
                         items(visibleTransactions, key = { it.id }) { transaction ->
                             TransactionRow(
                                 transaction = transaction,
-                                category = uiState.categories.firstOrNull {
-                                    it.id == transaction.categoryId
-                                },
+                                category = categoriesById[transaction.categoryId],
                                 areAmountsHidden = areAmountsHidden,
                                 onClick = { selectedTransaction = transaction }
                             )
@@ -1546,7 +1543,7 @@ private fun TransactionsScreen(
     selectedTransaction?.let { transaction ->
         TransactionDetailsDialog(
             transaction = transaction,
-            category = uiState.categories.firstOrNull { it.id == transaction.categoryId },
+            category = categoriesById[transaction.categoryId],
             areAmountsHidden = areAmountsHidden,
             onDismiss = { selectedTransaction = null },
             onEdit = {
@@ -2346,6 +2343,9 @@ private fun CategoryAssignmentDialog(
     var saveMerchantAsKeyword by rememberSaveable(transaction.id) {
         mutableStateOf(false)
     }
+    val categoriesById = remember(categories) {
+        categories.associateBy { it.id }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2411,7 +2411,7 @@ private fun CategoryAssignmentDialog(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         items(categories, key = { it.id }) { category ->
-                            val parent = categories.firstOrNull { it.id == category.parentId }
+                            val parent = categoriesById[category.parentId]
                             val isSelected = selectedCategoryId == category.id
                             Surface(
                                 modifier = Modifier
@@ -2537,39 +2537,68 @@ private fun CategoriesScreen(
                 top = 24.dp,
                 end = 20.dp,
                 bottom = 132.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            )
         ) {
-            item {
+            item(key = "categories_title", contentType = "categories_header") {
                 Text(
                     text = stringResource(R.string.categories_title),
+                    modifier = Modifier.padding(bottom = 18.dp),
                     style = MaterialTheme.typography.headlineLarge
                 )
             }
-            item {
+            item(key = "categories_description", contentType = "categories_header") {
                 Text(
                     text = stringResource(R.string.categories_description),
+                    modifier = Modifier.padding(bottom = 18.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            items(
-                items = topLevelCategories,
-                key = { it.id },
-                contentType = { "category_group" }
-            ) { topLevelCategory ->
-                CategoryGroup(
-                    topLevelCategory = topLevelCategory,
-                    children = childrenByParentId[topLevelCategory.id].orEmpty(),
-                    keywordsByCategoryId = keywordsByCategoryId,
-                    onAddKeyword = { categoryForKeyword = it },
-                    onDeleteKeyword = { keywordPendingDeletion = it },
-                    onAddSubcategory = {
-                        categoryEditor = CategoryEditorState(parentCategory = it)
-                    },
-                    onEditCategory = { categoryEditor = CategoryEditorState(category = it) },
-                    onDeleteCategory = { categoryPendingDeletion = it }
-                )
+            topLevelCategories.forEachIndexed { groupIndex, topLevelCategory ->
+                val children = childrenByParentId[topLevelCategory.id].orEmpty()
+                val isLastGroup = groupIndex == topLevelCategories.lastIndex
+
+                item(
+                    key = topLevelCategory.id,
+                    contentType = "category_group_header"
+                ) {
+                    CategoryGroupHeader(
+                        topLevelCategory = topLevelCategory,
+                        keywords = keywordsByCategoryId[topLevelCategory.id].orEmpty(),
+                        hasChildren = children.isNotEmpty(),
+                        addGroupSpacing = children.isEmpty() && !isLastGroup,
+                        onAddKeyword = { categoryForKeyword = it },
+                        onDeleteKeyword = { keywordPendingDeletion = it },
+                        onAddSubcategory = {
+                            categoryEditor = CategoryEditorState(parentCategory = it)
+                        },
+                        onEditCategory = {
+                            categoryEditor = CategoryEditorState(category = it)
+                        },
+                        onDeleteCategory = { categoryPendingDeletion = it }
+                    )
+                }
+
+                children.forEachIndexed { childIndex, category ->
+                    val isLastChild = childIndex == children.lastIndex
+                    item(
+                        key = category.id,
+                        contentType = "category_group_child"
+                    ) {
+                        CategoryGroupChild(
+                            category = category,
+                            keywords = keywordsByCategoryId[category.id].orEmpty(),
+                            isLastChild = isLastChild,
+                            addGroupSpacing = isLastChild && !isLastGroup,
+                            onAddKeyword = { categoryForKeyword = category },
+                            onDeleteKeyword = { keywordPendingDeletion = it },
+                            onEditCategory = {
+                                categoryEditor = CategoryEditorState(category = category)
+                            },
+                            onDeleteCategory = { categoryPendingDeletion = category }
+                        )
+                    }
+                }
             }
         }
 
@@ -2758,94 +2787,158 @@ private fun CategoryEditorDialog(
 }
 
 @Composable
-private fun CategoryGroup(
+private fun CategoryGroupHeader(
     topLevelCategory: CategoryEntity,
-    children: List<CategoryEntity>,
-    keywordsByCategoryId: Map<Long, List<KeywordRuleEntity>>,
+    keywords: List<KeywordRuleEntity>,
+    hasChildren: Boolean,
+    addGroupSpacing: Boolean,
     onAddKeyword: (CategoryEntity) -> Unit,
     onDeleteKeyword: (KeywordRuleEntity) -> Unit,
     onAddSubcategory: (CategoryEntity) -> Unit,
     onEditCategory: (CategoryEntity) -> Unit,
     onDeleteCategory: (CategoryEntity) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    val shape = if (hasChildren) {
+        MaterialTheme.shapes.medium.copy(
+            bottomStart = CornerSize(0.dp),
+            bottomEnd = CornerSize(0.dp)
+        )
+    } else {
+        MaterialTheme.shapes.medium
+    }
+
+    Column {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = if (hasChildren) 12.dp else 16.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                CategoryBadge(category = topLevelCategory)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = categoryLabel(topLevelCategory),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CategoryBadge(category = topLevelCategory)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = categoryLabel(topLevelCategory),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    if (!topLevelCategory.isSystem) {
+                        IconButton(onClick = { onEditCategory(topLevelCategory) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = stringResource(R.string.edit_category)
+                            )
+                        }
+                        IconButton(onClick = { onDeleteCategory(topLevelCategory) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = stringResource(R.string.delete_category)
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = { onAddKeyword(topLevelCategory) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(stringResource(R.string.add_keyword))
+                    }
+                    TextButton(
+                        onClick = { onAddSubcategory(topLevelCategory) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(stringResource(R.string.add_subcategory))
+                    }
+                }
+                if (keywords.isNotEmpty()) {
+                    KeywordChips(keywords, onDeleteKeyword)
+                }
+            }
+        }
+        if (addGroupSpacing) {
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun CategoryGroupChild(
+    category: CategoryEntity,
+    keywords: List<KeywordRuleEntity>,
+    isLastChild: Boolean,
+    addGroupSpacing: Boolean,
+    onAddKeyword: () -> Unit,
+    onDeleteKeyword: (KeywordRuleEntity) -> Unit,
+    onEditCategory: () -> Unit,
+    onDeleteCategory: () -> Unit
+) {
+    val shape = if (isLastChild) {
+        MaterialTheme.shapes.medium.copy(
+            topStart = CornerSize(0.dp),
+            topEnd = CornerSize(0.dp)
+        )
+    } else {
+        MaterialTheme.shapes.medium.copy(
+            topStart = CornerSize(0.dp),
+            topEnd = CornerSize(0.dp),
+            bottomStart = CornerSize(0.dp),
+            bottomEnd = CornerSize(0.dp)
+        )
+    }
+
+    Column {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = if (isLastChild) 16.dp else 12.dp
                 )
-                if (!topLevelCategory.isSystem) {
-                    IconButton(onClick = { onEditCategory(topLevelCategory) }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Edit,
-                            contentDescription = stringResource(R.string.edit_category)
-                        )
-                    }
-                    IconButton(onClick = { onDeleteCategory(topLevelCategory) }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = stringResource(R.string.delete_category)
-                        )
-                    }
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = { onAddKeyword(topLevelCategory) },
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.add_keyword))
-                }
-                TextButton(
-                    onClick = { onAddSubcategory(topLevelCategory) },
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(stringResource(R.string.add_subcategory))
-                }
-            }
-            val topLevelKeywords = keywordsByCategoryId[topLevelCategory.id].orEmpty()
-            if (topLevelKeywords.isNotEmpty()) {
-                KeywordChips(topLevelKeywords, onDeleteKeyword)
-            }
-            children.forEach { category ->
                 CategoryKeywordRow(
                     category = category,
-                    keywords = keywordsByCategoryId[category.id].orEmpty(),
-                    onAddKeyword = { onAddKeyword(category) },
+                    keywords = keywords,
+                    onAddKeyword = onAddKeyword,
                     onDeleteKeyword = onDeleteKeyword,
-                    onEditCategory = { onEditCategory(category) },
-                    onDeleteCategory = { onDeleteCategory(category) }
+                    onEditCategory = onEditCategory,
+                    onDeleteCategory = onDeleteCategory
                 )
             }
+        }
+        if (addGroupSpacing) {
+            Spacer(modifier = Modifier.height(18.dp))
         }
     }
 }
@@ -2940,14 +3033,15 @@ private fun KeywordChips(
     keywords: List<KeywordRuleEntity>,
     onDeleteKeyword: (KeywordRuleEntity) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(end = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(end = 4.dp)
     ) {
-        keywords.forEach { rule ->
+        items(
+            items = keywords,
+            key = { it.id },
+            contentType = { "keyword" }
+        ) { rule ->
             AssistChip(
                 onClick = { onDeleteKeyword(rule) },
                 label = {
@@ -4911,21 +5005,36 @@ private fun formatEditableAmount(amountMinor: Long): String =
 private fun Modifier.amountBlur(areAmountsHidden: Boolean): Modifier =
     if (areAmountsHidden) blur(12.dp, BlurredEdgeTreatment.Unbounded) else this
 
-private fun formatMoney(amountMinor: Long): String {
-    val formatter = NumberFormat.getNumberInstance(Locale.getDefault()).apply {
+private class DisplayFormatters(val locale: Locale) {
+    val money: NumberFormat = NumberFormat.getNumberInstance(locale).apply {
         minimumFractionDigits = 2
         maximumFractionDigits = 2
     }
+    val date: DateTimeFormatter = DateTimeFormatter
+        .ofLocalizedDate(FormatStyle.MEDIUM)
+        .withLocale(locale)
+    val monthYear: DateTimeFormatter = DateTimeFormatter.ofPattern("LLLL yyyy", locale)
+}
+
+private val displayFormatters = ThreadLocal<DisplayFormatters>()
+
+private fun currentDisplayFormatters(): DisplayFormatters {
+    val locale = Locale.getDefault()
+    return displayFormatters.get()?.takeIf { it.locale == locale }
+        ?: DisplayFormatters(locale).also(displayFormatters::set)
+}
+
+private fun formatMoney(amountMinor: Long): String {
+    val formatter = currentDisplayFormatters().money
     return "${formatter.format(BigDecimal.valueOf(amountMinor, 2))} RSD"
 }
 
 private fun formatDate(epochDay: Long): String =
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-        .withLocale(Locale.getDefault())
+    currentDisplayFormatters().date
         .format(LocalDate.ofEpochDay(epochDay))
 
 private fun formatMonthYear(date: LocalDate): String =
-    DateTimeFormatter.ofPattern("LLLL yyyy", Locale.getDefault()).format(date)
+    currentDisplayFormatters().monthYear.format(date)
 
 private fun Long.toDatePickerMillis(): Long =
     LocalDate.ofEpochDay(this)
