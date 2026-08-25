@@ -11,7 +11,6 @@
     <string name="dashboard_title">Početna</string>
     <string name="dashboard_subtitle">Jasan pregled vaših ličnih finansija.</string>
     <string name="balance_total">Ukupno stanje</string>
-    <string name="balance_placeholder">0 RSD</string>
     <string name="balance_currency_label">Osnovna valuta: RSD</string>
     <string name="income_this_month">Prihodi ovog meseca</string>
     <string name="expenses_this_month">Troškovi ovog meseca</string>
@@ -56,7 +55,6 @@
 
     <string name="analytics_title">Analitika</string>
     <string name="analytics_placeholder">Grafikoni i poređenja će se pojaviti ovde.</string>
-    <string name="net_this_month">Neto ovog meseca</string>
     <string name="income_in_period">Prihodi u izabranom periodu</string>
     <string name="expenses_in_period">Troškovi u izabranom periodu</string>
     <string name="net_in_period">Neto u izabranom periodu</string>
@@ -117,7 +115,6 @@
     <string name="automatic_category_info">Kategorija će biti automatski određena pomoću vaših pravila za ključne reči.</string>
     <string name="uncategorized">Nekategorisano</string>
     <string name="uncategorized_count">Nekategorisano: %1$d</string>
-    <string name="no_uncategorized_transactions">Nema nekategorisanih transakcija.</string>
     <string name="remember_keyword">Zapamti kao ključnu reč</string>
     <string name="assign_category">Dodeli kategoriju</string>
     <string name="select_category">Izaberite kategoriju</string>
@@ -137,7 +134,6 @@
     <string name="invalid_amount">Unesite ispravan iznos veći od nule.</string>
     <string name="merchant_required">Unesite prodavca ili izvor prihoda.</string>
     <string name="transactions_count">Transakcije: %1$d</string>
-    <string name="category_label">Kategorija: %1$s</string>
     <string name="no_category_assigned">Kategorija nije dodeljena</string>
 
     <string name="categories_title">Kategorije i ključne reči</string>

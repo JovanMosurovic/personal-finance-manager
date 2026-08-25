@@ -10,7 +10,6 @@
     <string name="dashboard_title">Dashboard</string>
     <string name="dashboard_subtitle">A clear view of your personal finances.</string>
     <string name="balance_total">Total balance</string>
-    <string name="balance_placeholder">0 RSD</string>
     <string name="balance_currency_label">Primary currency: RSD</string>
     <string name="income_this_month">Income this month</string>
     <string name="expenses_this_month">Expenses this month</string>
@@ -55,7 +54,6 @@
 
     <string name="analytics_title">Analytics</string>
     <string name="analytics_placeholder">Charts and comparisons will appear here.</string>
-    <string name="net_this_month">Net this month</string>
     <string name="income_in_period">Income in selected period</string>
     <string name="expenses_in_period">Expenses in selected period</string>
     <string name="net_in_period">Net in selected period</string>
@@ -116,7 +114,6 @@
     <string name="automatic_category_info">The category will be assigned automatically using your keyword rules.</string>
     <string name="uncategorized">Uncategorized</string>
     <string name="uncategorized_count">Uncategorized: %1$d</string>
-    <string name="no_uncategorized_transactions">There are no uncategorized transactions.</string>
     <string name="remember_keyword">Remember as keyword</string>
     <string name="assign_category">Assign category</string>
     <string name="select_category">Select a category</string>
@@ -136,7 +133,6 @@
     <string name="invalid_amount">Enter a valid amount greater than zero.</string>
     <string name="merchant_required">Enter a merchant or source.</string>
     <string name="transactions_count">Transactions: %1$d</string>
-    <string name="category_label">Category: %1$s</string>
     <string name="no_category_assigned">No category assigned</string>
 
     <string name="categories_title">Categories and keywords</string>

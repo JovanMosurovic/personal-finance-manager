@@ -26,7 +26,7 @@ interface TransactionDao {
     suspend fun clearAutomaticCategoryForRule(ruleId: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(transaction: TransactionEntity): Long
+    suspend fun insert(transaction: TransactionEntity)
 
     @Update
     suspend fun update(transaction: TransactionEntity)

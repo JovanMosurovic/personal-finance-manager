@@ -31,7 +31,7 @@ interface CategoryDao {
     suspend fun insertAll(categories: List<CategoryEntity>)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insert(category: CategoryEntity): Long
+    suspend fun insert(category: CategoryEntity)
 
     @Query("UPDATE categories SET nameKey = :name WHERE id = :categoryId AND isSystem = 0")
     suspend fun renameCustomCategory(categoryId: Long, name: String)

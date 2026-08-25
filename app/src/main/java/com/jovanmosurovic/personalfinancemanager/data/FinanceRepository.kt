@@ -8,11 +8,12 @@ import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEn
 import com.jovanmosurovic.personalfinancemanager.data.importer.OtpParsedTransaction
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import kotlinx.coroutines.flow.Flow
-import java.util.Locale
 
 class FinanceRepository(
     private val database: FinanceDatabase
 ) {
+    private val ruleMatcher = TransactionRuleMatcher()
+
     fun observeTransactions(): Flow<List<TransactionEntity>> =
         database.transactionDao().observeAll()
 
@@ -41,13 +42,11 @@ class FinanceRepository(
         note: String,
         dateEpochDay: Long
     ) {
-        val normalizedMerchant = merchant.normalizeForMatching()
-        val matchedRule = database.keywordRuleDao()
-            .getActiveRules()
-            .firstOrNull { rule ->
-                ruleAppliesToTransaction(rule, type) &&
-                    keywordMatches(rule, normalizedMerchant)
-            }
+        val matchedRule = ruleMatcher.findMatchingRule(
+            rules = database.keywordRuleDao().getActiveRules(),
+            transactionType = type,
+            merchant = merchant
+        )
 
         database.transactionDao().insert(
             TransactionEntity(
@@ -78,12 +77,11 @@ class FinanceRepository(
             val matchedRule = if (existingTransaction.isManuallyCategorized) {
                 null
             } else {
-                database.keywordRuleDao()
-                    .getActiveRules()
-                    .firstOrNull { rule ->
-                        ruleAppliesToTransaction(rule, type) &&
-                            keywordMatches(rule, cleanedMerchant.normalizeForMatching())
-                    }
+                ruleMatcher.findMatchingRule(
+                    rules = database.keywordRuleDao().getActiveRules(),
+                    transactionType = type,
+                    merchant = cleanedMerchant
+                )
             }
 
             database.transactionDao().update(
@@ -139,10 +137,11 @@ class FinanceRepository(
                     return@forEach
                 }
 
-                val matchedRule = rules.firstOrNull { rule ->
-                    ruleAppliesToTransaction(rule, importedTransaction.type) &&
-                        keywordMatches(rule, importedTransaction.merchant.normalizeForMatching())
-                }
+                val matchedRule = ruleMatcher.findMatchingRule(
+                    rules = rules,
+                    transactionType = importedTransaction.type,
+                    merchant = importedTransaction.merchant
+                )
                 transactionDao.insert(
                     transaction.copy(
                         categoryId = matchedRule?.categoryId,
@@ -170,12 +169,7 @@ class FinanceRepository(
                 return@withTransaction
             }
 
-            val alreadyExists = categoryDao.getAll().any { category ->
-                !category.isSystem &&
-                    category.parentId == parentId &&
-                    category.nameKey.equals(cleanedName, ignoreCase = true)
-            }
-            if (alreadyExists) return@withTransaction
+            if (customCategoryExists(cleanedName, parentId)) return@withTransaction
 
             categoryDao.insert(
                 CategoryEntity(
@@ -198,13 +192,12 @@ class FinanceRepository(
                 ?: return@withTransaction
             if (category.isSystem) return@withTransaction
 
-            val alreadyExists = categoryDao.getAll().any { otherCategory ->
-                otherCategory.id != categoryId &&
-                    !otherCategory.isSystem &&
-                    otherCategory.parentId == category.parentId &&
-                    otherCategory.nameKey.equals(cleanedName, ignoreCase = true)
-            }
-            if (alreadyExists) return@withTransaction
+            val duplicateExists = customCategoryExists(
+                name = cleanedName,
+                parentId = category.parentId,
+                ignoredCategoryId = categoryId
+            )
+            if (duplicateExists) return@withTransaction
 
             categoryDao.renameCustomCategory(categoryId, cleanedName)
         }
@@ -282,13 +275,27 @@ class FinanceRepository(
         )
     }
 
+    private suspend fun customCategoryExists(
+        name: String,
+        parentId: Long?,
+        ignoredCategoryId: Long? = null
+    ): Boolean {
+        return database.categoryDao().getAll().any { category ->
+            category.id != ignoredCategoryId &&
+                !category.isSystem &&
+                category.parentId == parentId &&
+                category.nameKey.equals(name, ignoreCase = true)
+        }
+    }
+
     private suspend fun reclassifyUncategorizedInternal() {
         val rules = database.keywordRuleDao().getActiveRules()
         database.transactionDao().getUncategorized().forEach { transaction ->
-            val matchedRule = rules.firstOrNull { rule ->
-                ruleAppliesToTransaction(rule, TransactionType.valueOf(transaction.type)) &&
-                    keywordMatches(rule, transaction.merchant.normalizeForMatching())
-            }
+            val matchedRule = ruleMatcher.findMatchingRule(
+                rules = rules,
+                transactionType = TransactionType.valueOf(transaction.type),
+                merchant = transaction.merchant
+            )
             if (matchedRule != null) {
                 database.transactionDao().applyAutomaticCategory(
                     transactionId = transaction.id,
@@ -296,27 +303,6 @@ class FinanceRepository(
                     ruleId = matchedRule.id
                 )
             }
-        }
-    }
-
-    private fun ruleAppliesToTransaction(
-        rule: KeywordRuleEntity,
-        transactionType: TransactionType
-    ): Boolean = rule.transactionType == "ANY" || rule.transactionType == transactionType.name
-
-    private fun keywordMatches(
-        rule: KeywordRuleEntity,
-        normalizedMerchant: String
-    ): Boolean {
-        val normalizedKeyword = rule.keyword.normalizeForMatching()
-        return when (rule.matchMode) {
-            "EXACT" -> normalizedMerchant == normalizedKeyword
-
-            "WHOLE_WORD" -> normalizedMerchant
-                .split(Regex("[^A-Z0-9]+"))
-                .any { token -> token == normalizedKeyword }
-
-            else -> normalizedMerchant.contains(normalizedKeyword)
         }
     }
 }
@@ -330,21 +316,6 @@ private fun TransactionEntity.importKey(): String = listOf(
     type,
     amountMinor,
     dateEpochDay,
-    merchant.normalizeForMatching(),
-    note.normalizeForMatching()
+    normalizeForMatching(merchant),
+    normalizeForMatching(note)
 ).joinToString("|")
-
-private fun String.normalizeForMatching(): String = uppercase(Locale.ROOT)
-    .replace('Č', 'C')
-    .replace('Ć', 'C')
-    .replace('Ž', 'Z')
-    .replace('Š', 'S')
-    .replace('Đ', 'D')
-    .replace(Regex("\\s+"), " ")
-    .trim()
-    .replace(
-        Regex("\\s+(?:DATUM I VREME STAMPE|WWW\\.OTPBANKA\\.RS|VASA OTP BANKA|[123] OD [123]).*"),
-        ""
-    )
-    .replace(Regex("\\s+\\d{1,3}(?:[.]\\d{3})+[,]\\d{2}$"), "")
-    .trim()

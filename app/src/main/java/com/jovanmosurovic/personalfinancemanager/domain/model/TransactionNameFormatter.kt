@@ -1,16 +1,5 @@
 package com.jovanmosurovic.personalfinancemanager.domain.model
 
-import java.text.Normalizer
-import java.util.Locale
-
-object KnownOtpAccounts {
-    const val CURRENT_ACCOUNT = "325930070633456009"
-    const val VIRTUAL_CARD_ACCOUNT = "325912072662367691"
-    const val LEGACY_VIRTUAL_CARD_ACCOUNT = "9120726623676"
-    const val FILIP_PETROVIC_ACCOUNT = "9300708447362"
-    const val VIOLETA_DAMNJANOVIC_ACCOUNT = "9300500124019"
-}
-
 /**
  * Converts a bank's verbose transaction description into a short name for display.
  * The original value is intentionally kept in the database for searching and rules.
@@ -51,23 +40,6 @@ object TransactionNameFormatter {
         KnownName(Regex("google \\*google one|google one", RegexOption.IGNORE_CASE), "Google One")
     )
 
-    private val knownAccountNames = mapOf(
-        KnownOtpAccounts.CURRENT_ACCOUNT to "Tekući račun",
-        KnownOtpAccounts.FILIP_PETROVIC_ACCOUNT to "Filip Petrović",
-        KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT to "Violeta Damnjanović"
-    )
-
-    private val internalTransferRegex = Regex(
-        "^interni prenos sa racuna (\\d{13,18}) na racun (\\d{13,18})$"
-    )
-    private val legacyOutgoingTransferRegex = Regex("^prenos u korist (\\d{13,18})$")
-    private val mobileOutgoingTransferRegex = Regex(
-        "^m-banking prenos u korist (\\d{13,18})(?: \\(ib-mobile\\))?$"
-    )
-    private val mobileIncomingTransferRegex = Regex(
-        "^m-banking priliv sa racuna (\\d{13,18})(?: \\(ib-mobile\\)|\\(ib-mobile\\))?.*$"
-    )
-
     private val dateRegex = Regex("\\b(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{4}-\\d{1,2}-\\d{1,2})\\b")
     private val amountRegex = Regex("\\s+[+-]?(?:\\d{1,3}(?:[.,]\\d{3})*|\\d+)(?:[.,]\\d{2})?(?:\\s*RSD)?(?:\\s|$)", RegexOption.IGNORE_CASE)
     private val footerRegex = Regex(
@@ -85,11 +57,7 @@ object TransactionNameFormatter {
         val cleaned = sourceDescription(rawName)
         if (cleaned.isBlank()) return rawName.trim()
 
-        transferDisplayName(cleaned)?.let { return it }
-
-        knownAccountNames.entries.firstOrNull { (account, _) ->
-            Regex("\\b$account\\b").containsMatchIn(cleaned)
-        }?.let { return it.value }
+        OtpAccountNameResolver.resolveName(cleaned)?.let { return it }
 
         knownNames.firstOrNull { it.pattern.containsMatchIn(cleaned) }?.let {
             return it.displayName
@@ -120,54 +88,10 @@ object TransactionNameFormatter {
             .trim()
     }
 
-    private fun transferDisplayName(description: String): String? {
-        val normalized = description.normalizeForAccountMatching()
-
-        internalTransferRegex.matchEntire(normalized)?.let { match ->
-            val sourceAccount = match.groupValues[1]
-            val targetAccount = match.groupValues[2]
-            if (
-                sourceAccount == KnownOtpAccounts.CURRENT_ACCOUNT &&
-                targetAccount == KnownOtpAccounts.VIRTUAL_CARD_ACCOUNT
-            ) {
-                return VIRTUAL_CARD_NAME
-            }
-            return knownAccountNames[targetAccount] ?: OTHER_PERSON_TRANSFER_NAME
-        }
-
-        legacyOutgoingTransferRegex.matchEntire(normalized)?.let { match ->
-            val targetAccount = match.groupValues[1]
-            if (targetAccount == KnownOtpAccounts.LEGACY_VIRTUAL_CARD_ACCOUNT) {
-                return VIRTUAL_CARD_NAME
-            }
-            return knownAccountNames[targetAccount] ?: OTHER_PERSON_TRANSFER_NAME
-        }
-
-        mobileOutgoingTransferRegex.matchEntire(normalized)?.let { match ->
-            val targetAccount = match.groupValues[1]
-            return knownAccountNames[targetAccount] ?: OTHER_PERSON_TRANSFER_NAME
-        }
-
-        mobileIncomingTransferRegex.matchEntire(normalized)?.let { match ->
-            return knownAccountNames[match.groupValues[1]]
-        }
-
-        return null
-    }
-
-    private fun String.normalizeForAccountMatching(): String = Normalizer
-        .normalize(lowercase(Locale.ROOT), Normalizer.Form.NFD)
-        .replace("đ", "d")
-        .replace(Regex("\\p{M}+"), "")
-        .replace(whitespaceRegex, " ")
-        .trim()
-
     private fun String.removeOtpPrefix(): String = replace(
         Regex("^MasterCard Fluo debit\\s*-\\s*", RegexOption.IGNORE_CASE),
         ""
     )
 
     private const val MAX_DISPLAY_LENGTH = 40
-    private const val VIRTUAL_CARD_NAME = "Virtual card"
-    private const val OTHER_PERSON_TRANSFER_NAME = "Prenos drugom licu"
 }

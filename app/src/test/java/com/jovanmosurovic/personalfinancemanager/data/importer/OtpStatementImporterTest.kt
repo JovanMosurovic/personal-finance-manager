@@ -8,6 +8,7 @@ import org.junit.Test
 
 class OtpStatementImporterTest {
     private val importer = OtpStatementImporter()
+    private val pdfTextParser = OtpPdfTextParser()
 
     @Test
     fun parsesOtpCsvWithSerbianColumns() {
@@ -17,7 +18,10 @@ class OtpStatementImporterTest {
             22.08.2026,22.08.2026,"2.000,00","0,00",JETBRAINS D.O.O.,"12.000,00"
         """.trimIndent()
 
-        val transactions = importer.parseCsv(ByteArrayInputStream(csv.toByteArray()))
+        val transactions = importer.parse(
+            format = OtpImportFormat.CSV,
+            input = ByteArrayInputStream(csv.toByteArray())
+        )
 
         assertEquals(2, transactions.size)
         assertEquals(TransactionType.EXPENSE, transactions[0].type)
@@ -32,7 +36,10 @@ class OtpStatementImporterTest {
         val csv = "date,type,amount,currency,merchant,note\n" +
             "2026-08-23,EXPENSE,1250.50,RSD,Glovo,Delivery"
 
-        val transactions = importer.parseCsv(ByteArrayInputStream(csv.toByteArray()))
+        val transactions = importer.parse(
+            format = OtpImportFormat.CSV,
+            input = ByteArrayInputStream(csv.toByteArray())
+        )
 
         assertEquals(1, transactions.size)
         assertEquals(TransactionType.EXPENSE, transactions.single().type)
@@ -51,7 +58,7 @@ class OtpStatementImporterTest {
             OTP banka 1/1
         """.trimIndent()
 
-        val transactions = importer.parsePdfText(text)
+        val transactions = pdfTextParser.parse(text)
 
         assertEquals(2, transactions.size)
         assertEquals(TransactionType.EXPENSE, transactions[0].type)
@@ -69,7 +76,7 @@ class OtpStatementImporterTest {
             23.08.2026 GLOVOAPP BEOGRAD 950,00
         """.trimIndent()
 
-        val transactions = importer.parsePdfText(text)
+        val transactions = pdfTextParser.parse(text)
 
         assertEquals(1, transactions.size)
         assertEquals(TransactionType.EXPENSE, transactions.single().type)
@@ -88,7 +95,7 @@ class OtpStatementImporterTest {
             Vaša OTP banka Srbija Info center: 021 421 077
         """.trimIndent()
 
-        val transactions = importer.parsePdfText(text)
+        val transactions = pdfTextParser.parse(text)
 
         assertEquals(2, transactions.size)
         assertEquals("Prenos u korist 9120726623676", transactions[0].merchant)
@@ -107,7 +114,7 @@ class OtpStatementImporterTest {
             OTP banka Srbija 1/1
         """.trimIndent()
 
-        val transactions = importer.parsePdfText(text)
+        val transactions = pdfTextParser.parse(text)
 
         assertEquals(3, transactions.size)
         assertEquals(TransactionType.EXPENSE, transactions[0].type)
