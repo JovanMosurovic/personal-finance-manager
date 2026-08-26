@@ -1,8 +1,8 @@
 package com.jovanmosurovic.personalfinancemanager.domain.model
 
 /**
- * Converts a bank's verbose transaction description into a short name for display.
- * The original value is intentionally kept in the database for searching and rules.
+ * Converts verbose bank descriptions into short names for display.
+ * The original description remains stored for searching and rule matching.
  */
 object TransactionNameFormatter {
     private data class KnownName(
@@ -41,7 +41,10 @@ object TransactionNameFormatter {
     )
 
     private val dateRegex = Regex("\\b(?:\\d{1,2}[./-]\\d{1,2}[./-]\\d{4}|\\d{4}-\\d{1,2}-\\d{1,2})\\b")
-    private val amountRegex = Regex("\\s+[+-]?(?:\\d{1,3}(?:[.,]\\d{3})*|\\d+)(?:[.,]\\d{2})?(?:\\s*RSD)?(?:\\s|$)", RegexOption.IGNORE_CASE)
+    private val amountRegex = Regex(
+        "\\s+[+-]?(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{2})?|\\d+[.,]\\d{2}|\\d+\\s*RSD)(?:\\s|$)",
+        RegexOption.IGNORE_CASE
+    )
     private val footerRegex = Regex(
         "\\s+(?:datum i vreme štampe|www\\.otpbanka\\.rs|vaša otp banka|\\d+\\s+od\\s+\\d+).*",
         RegexOption.IGNORE_CASE
@@ -56,8 +59,6 @@ object TransactionNameFormatter {
     fun displayName(rawName: String): String {
         val cleaned = sourceDescription(rawName)
         if (cleaned.isBlank()) return rawName.trim()
-
-        OtpAccountNameResolver.resolveName(cleaned)?.let { return it }
 
         knownNames.firstOrNull { it.pattern.containsMatchIn(cleaned) }?.let {
             return it.displayName

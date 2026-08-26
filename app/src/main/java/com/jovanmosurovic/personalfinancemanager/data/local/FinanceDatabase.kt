@@ -15,7 +15,7 @@ import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEn
         KeywordRuleEntity::class,
         TransactionEntity::class
     ],
-    version = 8,
+    version = 1,
     exportSchema = false
 )
 abstract class FinanceDatabase : RoomDatabase() {

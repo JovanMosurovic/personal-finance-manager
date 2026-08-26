@@ -33,49 +33,10 @@ class TransactionNameFormatterTest {
     }
 
     @Test
-    fun distinguishesVirtualCardTransferFromOtherTransfers() {
+    fun leavesUnmappedTransferDescriptionReadable() {
         assertEquals(
-            "Virtual card",
+            "Prenos u korist 9120726623676",
             TransactionNameFormatter.displayName("Prenos u korist 9120726623676")
-        )
-        assertEquals(
-            "Virtual card",
-            TransactionNameFormatter.displayName(
-                "Interni prenos sa računa 325930070633456009 " +
-                    "na račun 325912072662367691"
-            )
-        )
-        assertEquals(
-            "Filip Petrović",
-            TransactionNameFormatter.displayName("m-Banking prenos u korist 9300708447362 (ib-mobile)")
-        )
-        assertEquals(
-            "Prenos drugom licu",
-            TransactionNameFormatter.displayName("m-Banking prenos u korist 9300706420629 (ib-mobile)")
-        )
-    }
-
-    @Test
-    fun mapsKnownIncomingAccountAndDoesNotOvermatchVirtualCardNumber() {
-        assertEquals(
-            "Tekući račun",
-            TransactionNameFormatter.displayName("Račun 325930070633456009")
-        )
-        assertEquals(
-            "Violeta Damnjanović",
-            TransactionNameFormatter.displayName(
-                "m-Banking priliv sa računa 9300500124019(ib-mobile) - JOVAN MOSUROVIĆ"
-            )
-        )
-        assertEquals(
-            "Referenca",
-            TransactionNameFormatter.displayName("Referenca 9120726623676")
-        )
-        assertEquals(
-            "Prenos drugom licu",
-            TransactionNameFormatter.displayName(
-                "m-Banking prenos u korist 9120726623676 (ib-mobile)"
-            )
         )
     }
 

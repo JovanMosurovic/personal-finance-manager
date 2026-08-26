@@ -1,6 +1,5 @@
 package com.jovanmosurovic.personalfinancemanager.data.importer
 
-import com.jovanmosurovic.personalfinancemanager.domain.model.KnownOtpAccounts
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import java.time.LocalDate
 import java.util.Locale
@@ -166,8 +165,10 @@ internal class OtpPdfTextParser {
             "M-BANKING PRILIV",
             "PRILIV",
             "PLATA",
+            "UPLATA",
+            "ZARADA",
             "JETBRAINS",
-            KnownOtpAccounts.VIOLETA_DAMNJANOVIC_ACCOUNT
+            "TRANSAKCIJE PO NALOGU GRAĐANA"
         ).any(normalized::contains)
     }
 }

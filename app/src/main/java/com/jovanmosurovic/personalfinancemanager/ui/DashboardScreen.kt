@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,23 +30,15 @@ import androidx.compose.ui.unit.dp
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
-import java.time.LocalDate
 
 @Composable
 internal fun DashboardScreen(
     uiState: FinanceUiState,
     areAmountsHidden: Boolean,
     onAmountsVisibilityChanged: (Boolean) -> Unit,
-    onViewTransactions: (
-        categoryId: Long?,
-        typeFilter: TransactionTypeFilter,
-        dateStartEpochDay: Long?,
-        dateEndEpochDay: Long?
-    ) -> Unit,
+    onViewTransactions: (TransactionTypeFilter, Long?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currentMonthRange = AnalyticsPeriod.THIS_MONTH.dateRange(LocalDate.now())
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -64,9 +55,7 @@ internal fun DashboardScreen(
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.headlineLarge
             )
-            IconButton(
-                onClick = { onAmountsVisibilityChanged(!areAmountsHidden) }
-            ) {
+            IconButton(onClick = { onAmountsVisibilityChanged(!areAmountsHidden) }) {
                 Icon(
                     imageVector = if (areAmountsHidden) {
                         Icons.Outlined.VisibilityOff
@@ -74,13 +63,8 @@ internal fun DashboardScreen(
                         Icons.Outlined.Visibility
                     },
                     contentDescription = stringResource(
-                        if (areAmountsHidden) {
-                            R.string.show_amounts
-                        } else {
-                            R.string.hide_amounts
-                        }
-                    ),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (areAmountsHidden) R.string.show_amounts else R.string.hide_amounts
+                    )
                 )
             }
         }
@@ -94,27 +78,21 @@ internal fun DashboardScreen(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-            ) {
+            Column(modifier = Modifier.padding(24.dp)) {
                 Text(
                     text = stringResource(R.string.balance_total),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = formatMoney(uiState.totalBalanceMinor),
                     modifier = Modifier.amountBlur(areAmountsHidden),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.headlineLarge
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.balance_currency_label),
-                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -130,14 +108,7 @@ internal fun DashboardScreen(
                 value = formatMoney(uiState.incomeThisMonthMinor),
                 accentColor = MaterialTheme.colorScheme.secondary,
                 valueBlurred = areAmountsHidden,
-                    onClick = {
-                        onViewTransactions(
-                            null,
-                            TransactionTypeFilter.INCOME,
-                            currentMonthRange.start.toEpochDay(),
-                            currentMonthRange.end.toEpochDay()
-                        )
-                    }
+                onClick = { onViewTransactions(TransactionTypeFilter.INCOME, null) }
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
@@ -145,14 +116,7 @@ internal fun DashboardScreen(
                 value = formatMoney(uiState.expensesThisMonthMinor),
                 accentColor = MaterialTheme.colorScheme.tertiary,
                 valueBlurred = areAmountsHidden,
-                    onClick = {
-                        onViewTransactions(
-                            null,
-                            TransactionTypeFilter.EXPENSE,
-                            currentMonthRange.start.toEpochDay(),
-                            currentMonthRange.end.toEpochDay()
-                        )
-                    }
+                onClick = { onViewTransactions(TransactionTypeFilter.EXPENSE, null) }
             )
         }
 
@@ -172,25 +136,15 @@ internal fun DashboardScreen(
                         text = stringResource(R.string.expense_chart_title),
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = stringResource(R.string.chart_last_7_days),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 SpendingChart(
                     transactions = uiState.transactions,
-                    emptyLabel = stringResource(R.string.expense_chart_placeholder),
+                    period = AnalyticsPeriod.LAST_7_DAYS,
                     areAmountsHidden = areAmountsHidden,
+                    emptyLabel = stringResource(R.string.expense_chart_placeholder),
                     onDateSelected = { date ->
-                        onViewTransactions(
-                            null,
-                            TransactionTypeFilter.ALL,
-                            date.toEpochDay(),
-                            date.toEpochDay()
-                        )
+                        onViewTransactions(TransactionTypeFilter.ALL, date.toEpochDay())
                     }
                 )
             }
@@ -200,14 +154,7 @@ internal fun DashboardScreen(
             transactions = uiState.transactions,
             categories = uiState.categories,
             areAmountsHidden = areAmountsHidden,
-            onViewAll = {
-                onViewTransactions(
-                    null,
-                    TransactionTypeFilter.ALL,
-                    null,
-                    null
-                )
-            }
+            onViewAll = { onViewTransactions(TransactionTypeFilter.ALL, null) }
         )
     }
 }
@@ -234,11 +181,9 @@ private fun RecentActivityCard(
                     Text(stringResource(R.string.view_all))
                 }
             }
-
             if (transactions.isEmpty()) {
                 Text(
                     text = stringResource(R.string.transactions_empty),
-                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
@@ -249,7 +194,7 @@ private fun RecentActivityCard(
                         areAmountsHidden = areAmountsHidden
                     )
                     if (index < minOf(2, transactions.lastIndex)) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                     }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,42 +31,26 @@ fun PersonalFinanceApp() {
     val importState by financeViewModel.importState.collectAsStateWithLifecycle()
     val areAmountsHidden by financeViewModel.areAmountsHidden.collectAsStateWithLifecycle()
     val isStatementReminderEnabled by financeViewModel.isStatementReminderEnabled.collectAsStateWithLifecycle()
-    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = currentBackStackEntry?.destination?.route
-    val isAddTransactionRoute = currentRoute == ADD_TRANSACTION_ROUTE
-    var transactionInitialCategoryId by rememberSaveable {
-        mutableStateOf(ALL_CATEGORIES_FILTER)
-    }
-    var transactionInitialTypeFilter by rememberSaveable {
-        mutableStateOf(TransactionTypeFilter.ALL)
-    }
-    var transactionInitialDateStartEpochDay by rememberSaveable {
-        mutableStateOf<Long?>(null)
-    }
-    var transactionInitialDateEndEpochDay by rememberSaveable {
-        mutableStateOf<Long?>(null)
+    val currentRoute by navController.currentBackStackEntryAsState()
+    val route = currentRoute?.destination?.route
+    val isAddTransactionRoute = route == ADD_TRANSACTION_ROUTE
+
+    var initialCategoryId by rememberSaveable { mutableLongStateOf(ALL_CATEGORIES_FILTER) }
+    var initialTypeFilter by rememberSaveable { mutableStateOf(TransactionTypeFilter.ALL) }
+    var initialDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    fun resetTransactionFilters() {
+        initialCategoryId = ALL_CATEGORIES_FILTER
+        initialTypeFilter = TransactionTypeFilter.ALL
+        initialDateEpochDay = null
     }
 
-    val resetTransactionNavigationFilter = {
-        transactionInitialCategoryId = ALL_CATEGORIES_FILTER
-        transactionInitialTypeFilter = TransactionTypeFilter.ALL
-        transactionInitialDateStartEpochDay = null
-        transactionInitialDateEndEpochDay = null
-    }
-    val openTransactionsWithFilters: (
-        Long?,
-        TransactionTypeFilter,
-        Long?,
-        Long?
-    ) -> Unit = { categoryId, typeFilter, start, end ->
-        transactionInitialCategoryId = categoryId ?: ALL_CATEGORIES_FILTER
-        transactionInitialTypeFilter = typeFilter
-        transactionInitialDateStartEpochDay = start
-        transactionInitialDateEndEpochDay = end
+    fun openTransactions(type: TransactionTypeFilter, categoryId: Long?, dateEpochDay: Long?) {
+        initialTypeFilter = type
+        initialCategoryId = categoryId ?: ALL_CATEGORIES_FILTER
+        initialDateEpochDay = dateEpochDay
         navController.navigate(TopLevelDestination.TRANSACTIONS.route) {
-            popUpTo(TopLevelDestination.DASHBOARD.route) {
-                saveState = true
-            }
+            popUpTo(TopLevelDestination.DASHBOARD.route) { saveState = true }
             launchSingleTop = true
             restoreState = false
         }
@@ -76,45 +61,15 @@ fun PersonalFinanceApp() {
         bottomBar = {
             if (!isAddTransactionRoute) {
                 FinanceBottomNavigation(
-                    currentRoute = currentRoute,
+                    currentRoute = route,
                     onDestinationSelected = { destination ->
-                        when (destination) {
-                            TopLevelDestination.ANALYTICS -> {
-                                if (currentRoute != destination.route) {
-                                    val returnedToAnalytics = navController.popBackStack(
-                                        destination.route,
-                                        inclusive = false
-                                    )
-                                    if (!returnedToAnalytics) {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(TopLevelDestination.DASHBOARD.route) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    }
-                                }
-                            }
-                            TopLevelDestination.TRANSACTIONS -> {
-                                resetTransactionNavigationFilter()
-                                navController.navigate(destination.route) {
-                                    popUpTo(TopLevelDestination.DASHBOARD.route) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = false
-                                }
-                            }
-                            else -> {
-                                navController.navigate(destination.route) {
-                                    popUpTo(TopLevelDestination.DASHBOARD.route) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
+                        if (destination == TopLevelDestination.TRANSACTIONS) {
+                            resetTransactionFilters()
+                        }
+                        navController.navigate(destination.route) {
+                            popUpTo(TopLevelDestination.DASHBOARD.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = destination != TopLevelDestination.TRANSACTIONS
                         }
                     }
                 )
@@ -134,20 +89,17 @@ fun PersonalFinanceApp() {
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
                         onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
-                        onViewTransactions = openTransactionsWithFilters
+                        onViewTransactions = { type, date -> openTransactions(type, null, date) }
                     )
                 }
                 composable(TopLevelDestination.TRANSACTIONS.route) {
                     TransactionsScreen(
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
-                        initialCategoryId = transactionInitialCategoryId,
-                        initialTypeFilter = transactionInitialTypeFilter,
-                        initialDateStartEpochDay = transactionInitialDateStartEpochDay,
-                        initialDateEndEpochDay = transactionInitialDateEndEpochDay,
-                        onAddTransaction = {
-                            navController.navigate(ADD_TRANSACTION_ROUTE)
-                        },
+                        initialCategoryId = initialCategoryId,
+                        initialTypeFilter = initialTypeFilter,
+                        initialDateEpochDay = initialDateEpochDay,
+                        onAddTransaction = { navController.navigate(ADD_TRANSACTION_ROUTE) },
                         onAssignCategory = financeViewModel::assignCategory,
                         onUpdateTransaction = financeViewModel::updateTransaction,
                         onDeleteTransaction = financeViewModel::deleteTransaction
@@ -157,8 +109,8 @@ fun PersonalFinanceApp() {
                     AnalyticsScreen(
                         uiState = uiState,
                         areAmountsHidden = areAmountsHidden,
-                        onViewAllTransactions = { categoryId, typeFilter, start, end ->
-                            openTransactionsWithFilters(categoryId, typeFilter, start, end)
+                        onViewTransactions = { type, categoryId ->
+                            openTransactions(type, categoryId, null)
                         }
                     )
                 }
@@ -186,14 +138,8 @@ fun PersonalFinanceApp() {
                 composable(ADD_TRANSACTION_ROUTE) {
                     AddTransactionScreen(
                         onCancel = { navController.popBackStack() },
-                        onSave = { type, amountMinor, merchant, note, dateEpochDay ->
-                            financeViewModel.addTransaction(
-                                type = type,
-                                amountMinor = amountMinor,
-                                merchant = merchant,
-                                note = note,
-                                dateEpochDay = dateEpochDay
-                            )
+                        onSave = { type, amount, merchant, note, date ->
+                            financeViewModel.addTransaction(type, amount, merchant, note, date)
                             navController.popBackStack()
                         }
                     )

@@ -29,33 +29,16 @@ internal fun categoryLabel(category: CategoryEntity): String =
 private fun categoryLabelRes(nameKey: String): Int = when (nameKey) {
     "category_food" -> R.string.category_food
     "category_groceries" -> R.string.category_groceries
-    "category_fast_food" -> R.string.category_fast_food
     "category_delivery" -> R.string.category_delivery
-    "category_kiosk" -> R.string.category_kiosk
     "category_utilities" -> R.string.category_utilities
     "category_phone_internet" -> R.string.category_phone_internet
-    "category_infostan" -> R.string.category_infostan
     "category_electricity" -> R.string.category_electricity
     "category_car" -> R.string.category_car
     "category_fuel" -> R.string.category_fuel
-    "category_parking" -> R.string.category_parking
-    "category_registration" -> R.string.category_registration
     "category_income" -> R.string.category_income
     "category_salary" -> R.string.category_salary
-    "category_personal" -> R.string.category_personal
-    "category_drugstore" -> R.string.category_drugstore
-    "category_pharmacy" -> R.string.category_pharmacy
     "category_shopping" -> R.string.category_shopping
-    "category_clothing" -> R.string.category_clothing
     "category_online" -> R.string.category_online
-    "category_electronics" -> R.string.category_electronics
-    "category_home" -> R.string.category_home
-    "category_leisure" -> R.string.category_leisure
-    "category_entertainment" -> R.string.category_entertainment
-    "category_subscriptions" -> R.string.category_subscriptions
-    "category_online_payments" -> R.string.category_online_payments
-    "category_virtual_card" -> R.string.category_virtual_card
-    "category_transfers" -> R.string.category_transfers
     else -> R.string.uncategorized
 }
 

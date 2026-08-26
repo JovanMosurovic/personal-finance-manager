@@ -68,14 +68,14 @@ internal class OtpCsvParser {
             outgoing = outgoing
         ) ?: return null
 
-        val note = noteRaw.orEmpty().cleanText()
-        val merchant = merchantRaw.orEmpty().cleanText().ifBlank { note }
+        val note = noteRaw.orEmpty().trim()
+        val merchant = merchantRaw.orEmpty().trim().ifBlank { note }
         if (merchant.isBlank()) return null
 
         return OtpParsedTransaction(
             type = parsedAmount.type,
             amountMinor = parsedAmount.amountMinor,
-            merchant = merchant.removeOtpPrefix(),
+            merchant = merchant,
             note = if (note.equals(merchant, ignoreCase = true)) "" else note,
             dateEpochDay = date.toEpochDay()
         )

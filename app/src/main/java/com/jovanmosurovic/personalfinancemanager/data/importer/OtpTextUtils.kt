@@ -6,10 +6,8 @@ private val otpPrefixRegex = Regex(
     RegexOption.IGNORE_CASE
 )
 
-internal fun String.cleanText(): String {
-    return replace(otpWhitespaceRegex, " ").trim()
-}
+internal fun String.cleanText(): String =
+    replace(otpWhitespaceRegex, " ").trim()
 
-internal fun String.removeOtpPrefix(): String {
-    return replace(otpPrefixRegex, "").cleanText()
-}
+internal fun String.removeOtpPrefix(): String =
+    replace(otpPrefixRegex, "").cleanText()

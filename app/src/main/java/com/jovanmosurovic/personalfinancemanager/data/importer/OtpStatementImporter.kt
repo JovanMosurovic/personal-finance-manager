@@ -59,10 +59,9 @@ class OtpStatementImporter {
         return try {
             PDFBoxResourceLoader.init(context.applicationContext)
             PDDocument.load(input).use { document ->
-                val text = PDFTextStripper().apply {
+                PDFTextStripper().apply {
                     sortByPosition = true
-                }.getText(document)
-                pdfTextParser.parse(text)
+                }.getText(document).let(pdfTextParser::parse)
             }
         } catch (exception: Exception) {
             throw OtpStatementImportException(exception)

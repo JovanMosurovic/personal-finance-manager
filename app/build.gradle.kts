@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.jovanmosurovic.personalfinancemanager"
+        applicationId = "com.jovanmosurovic.personalfinancemanager.lite"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

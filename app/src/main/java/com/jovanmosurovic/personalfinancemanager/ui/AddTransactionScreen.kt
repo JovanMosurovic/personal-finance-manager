@@ -25,6 +25,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -46,7 +47,7 @@ internal fun AddTransactionScreen(
     var amount by rememberSaveable { mutableStateOf("") }
     var merchant by rememberSaveable { mutableStateOf("") }
     var note by rememberSaveable { mutableStateOf("") }
-    var selectedDateEpochDay by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
+    var selectedDateEpochDay by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     var errorMessageRes by rememberSaveable { mutableStateOf<Int?>(null) }
 
     Column(

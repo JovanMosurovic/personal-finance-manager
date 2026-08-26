@@ -3,6 +3,7 @@ package com.jovanmosurovic.personalfinancemanager.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDownward
@@ -32,7 +32,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
@@ -52,10 +52,8 @@ internal fun MetricCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.clickable(role = Role.Button, onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = accentColor.copy(alpha = 0.10f)
-        )
+        modifier = modifier.clickableCard(onClick),
+        colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.10f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -63,7 +61,9 @@ internal fun MetricCard(
                     text = label,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false
                 )
                 Icon(
                     imageVector = if (accentColor == MaterialTheme.colorScheme.secondary) {
@@ -80,7 +80,9 @@ internal fun MetricCard(
             Text(
                 text = value,
                 modifier = Modifier.amountBlur(valueBlurred),
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -89,74 +91,56 @@ internal fun MetricCard(
 @Composable
 internal fun SpendingChart(
     transactions: List<TransactionEntity>,
-    emptyLabel: String,
+    period: AnalyticsPeriod,
     areAmountsHidden: Boolean,
+    emptyLabel: String,
     onDateSelected: (LocalDate) -> Unit,
-    modifier: Modifier = Modifier,
-    period: AnalyticsPeriod = AnalyticsPeriod.LAST_7_DAYS,
-    range: AnalyticsDateRange? = null,
-    selectedDate: LocalDate? = null
+    modifier: Modifier = Modifier
 ) {
-    val points = spendingPointsForPeriod(transactions, period, range)
+    val points = spendingPointsForPeriod(transactions, period)
     val maxAmount = points.maxOfOrNull { it.amountMinor } ?: 0L
-    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val expenseColor = MaterialTheme.colorScheme.tertiary
 
-    if (maxAmount == 0L) {
+    if (maxAmount == 0L || areAmountsHidden) {
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(128.dp),
+                .height(132.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = emptyLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        return
-    }
-
-    if (areAmountsHidden) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(128.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = Icons.Outlined.VisibilityOff,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = stringResource(R.string.amounts_hidden_chart),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (areAmountsHidden) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Outlined.VisibilityOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.amounts_hidden_chart),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Text(emptyLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-    ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val expenseColor = MaterialTheme.colorScheme.tertiary
+    val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+
+    Column(modifier = modifier.fillMaxWidth()) {
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(132.dp)
-                .pointerInput(points, onDateSelected) {
-                    detectTapGestures { tapOffset ->
-                        val gap = if (points.size > 14) 3.dp.toPx() else 7.dp.toPx()
+                .pointerInput(points) {
+                    detectTapGestures { offset ->
+                        val gap = 7.dp.toPx()
                         val barWidth = (size.width - gap * (points.size - 1)) / points.size
-                        val slotWidth = barWidth + gap
-                        val index = (tapOffset.x / slotWidth)
+                        val index = (offset.x / (barWidth + gap))
                             .roundToInt()
                             .coerceIn(0, points.lastIndex)
                         onDateSelected(points[index].date)
@@ -166,66 +150,38 @@ internal fun SpendingChart(
             val bottom = size.height - 8.dp.toPx()
             val top = 8.dp.toPx()
             val chartHeight = bottom - top
-            val gap = if (points.size > 14) 3.dp.toPx() else 7.dp.toPx()
+            val gap = 7.dp.toPx()
             val barWidth = (size.width - gap * (points.size - 1)) / points.size
 
             listOf(0f, 0.5f, 1f).forEach { progress ->
-                val y = bottom - (chartHeight * progress)
-                drawLine(
-                    color = outlineColor,
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = 1.dp.toPx()
-                )
+                val y = bottom - chartHeight * progress
+                drawLine(outlineColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
             }
-
             points.forEachIndexed { index, point ->
                 val barHeight = ((point.amountMinor.toFloat() / maxAmount) * chartHeight)
                     .coerceAtLeast(4.dp.toPx())
-                val x = index * (barWidth + gap)
-                val isSelected = selectedDate == point.date
-                val barColor = when {
-                    isSelected -> primaryColor
-                    selectedDate != null -> expenseColor.copy(alpha = 0.68f)
-                    index == points.lastIndex -> primaryColor
-                    else -> expenseColor
-                }
                 drawRoundRect(
-                    color = barColor,
-                    topLeft = Offset(x, bottom - barHeight),
+                    color = if (index == points.lastIndex) primaryColor else expenseColor,
+                    topLeft = Offset(index * (barWidth + gap), bottom - barHeight),
                     size = Size(barWidth, barHeight),
-                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                    cornerRadius = CornerRadius(7.dp.toPx(), 7.dp.toPx())
                 )
             }
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 4.dp)
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val labelStep = when {
-                points.size <= 7 -> 1
-                points.size <= 14 -> 2
-                else -> 5
-            }
-            points.forEachIndexed { index, point ->
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (index == 0 || index == points.lastIndex || index % labelStep == 0) {
-                        Text(
-                            text = chartDayLabel(point.date, points.size > 7),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
+            Text(chartDayLabel(points.first().date), style = MaterialTheme.typography.labelSmall)
+            Text(chartDayLabel(points.last().date), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
+
+@Composable
+private fun chartDayLabel(date: LocalDate): String = "${date.dayOfMonth}.${date.monthValue}."
 
 @Composable
 internal fun CompactTransactionRow(
@@ -244,17 +200,21 @@ internal fun CompactTransactionRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TransactionBadge(transaction = transaction, color = accentColor)
-        Spacer(modifier = Modifier.width(12.dp))
+        TransactionBadge(transaction, accentColor)
+        Spacer(modifier = Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = TransactionNameFormatter.displayName(transaction.merchant),
                 style = MaterialTheme.typography.titleMedium,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = category?.let { categoryLabel(it) }
-                    ?: stringResource(R.string.no_category_assigned),
+                text = if (category != null) {
+                    categoryLabel(category)
+                } else {
+                    stringResource(R.string.no_category_assigned)
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
@@ -271,10 +231,7 @@ internal fun CompactTransactionRow(
 }
 
 @Composable
-internal fun TransactionBadge(
-    transaction: TransactionEntity,
-    color: Color
-) {
+internal fun TransactionBadge(transaction: TransactionEntity, color: Color) {
     Surface(
         modifier = Modifier.size(42.dp),
         shape = CircleShape,
@@ -294,3 +251,6 @@ internal fun TransactionBadge(
         }
     }
 }
+
+private fun Modifier.clickableCard(onClick: () -> Unit): Modifier =
+    clickable(onClick = onClick)
