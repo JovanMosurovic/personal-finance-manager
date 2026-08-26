@@ -10,6 +10,7 @@ import com.jovanmosurovic.personalfinancemanager.data.FinanceRepository
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.KeywordRuleEntity
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.TransactionEntity
+import com.jovanmosurovic.personalfinancemanager.data.worker.StatementReminderScheduler
 import com.jovanmosurovic.personalfinancemanager.domain.model.TransactionType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,8 +69,12 @@ class FinanceViewModel @Inject constructor(
     private val _areAmountsHidden = MutableStateFlow(
         preferences.getBoolean(KEY_HIDE_AMOUNTS, false)
     )
+    private val _isStatementReminderEnabled = MutableStateFlow(
+        preferences.getBoolean(KEY_STATEMENT_REMINDER_ENABLED, false)
+    )
     val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
     val areAmountsHidden: StateFlow<Boolean> = _areAmountsHidden.asStateFlow()
+    val isStatementReminderEnabled: StateFlow<Boolean> = _isStatementReminderEnabled.asStateFlow()
     private val statementImportService = StatementImportService(application, repository)
 
     val uiState: StateFlow<FinanceUiState> = combine(
@@ -91,6 +96,9 @@ class FinanceViewModel @Inject constructor(
     )
 
     init {
+        if (_isStatementReminderEnabled.value) {
+            StatementReminderScheduler.schedule(application)
+        }
         viewModelScope.launch {
             repository.seedDefaults()
             defaultsReady.value = true
@@ -213,7 +221,20 @@ class FinanceViewModel @Inject constructor(
         }
     }
 
+    fun setStatementReminderEnabled(enabled: Boolean) {
+        _isStatementReminderEnabled.value = enabled
+        preferences.edit {
+            putBoolean(KEY_STATEMENT_REMINDER_ENABLED, enabled)
+        }
+        if (enabled) {
+            StatementReminderScheduler.schedule(getApplication())
+        } else {
+            StatementReminderScheduler.cancel(getApplication())
+        }
+    }
+
 }
 
 private const val PREFERENCES_NAME = "finance_preferences"
 private const val KEY_HIDE_AMOUNTS = "hide_amounts"
+private const val KEY_STATEMENT_REMINDER_ENABLED = "statement_reminder_enabled"

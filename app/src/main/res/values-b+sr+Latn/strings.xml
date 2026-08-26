@@ -174,6 +174,10 @@
     <string name="import_otp_error_no_transactions">U izabranom fajlu nisu pronađene validne transakcije.</string>
     <string name="import_otp_error_read_failed">Izabrani fajl nije moguće otvoriti.</string>
     <string name="import_otp_done">Gotovo</string>
+    <string name="statement_reminder_title">Mesečni podsetnik za OTP izvod</string>
+    <string name="statement_reminder_description">Primite lokalni podsetnik početkom svakog meseca da uvezete najnoviji OTP izvod.</string>
+    <string name="statement_reminder_channel_name">Podsetnici za OTP izvod</string>
+    <string name="statement_reminder_message">Uvezite najnoviji OTP izvod da ažurirate svoje finansije.</string>
 
     <plurals name="import_otp_success">
         <item quantity="one">Uvezena je %1$d od %2$d transakcije iz formata %3$s.</item>

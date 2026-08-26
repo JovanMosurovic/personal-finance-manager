@@ -29,6 +29,7 @@ fun PersonalFinanceApp() {
     val uiState by financeViewModel.uiState.collectAsStateWithLifecycle()
     val importState by financeViewModel.importState.collectAsStateWithLifecycle()
     val areAmountsHidden by financeViewModel.areAmountsHidden.collectAsStateWithLifecycle()
+    val isStatementReminderEnabled by financeViewModel.isStatementReminderEnabled.collectAsStateWithLifecycle()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val isAddTransactionRoute = currentRoute == ADD_TRANSACTION_ROUTE
@@ -175,7 +176,9 @@ fun PersonalFinanceApp() {
                     SettingsScreen(
                         importState = importState,
                         areAmountsHidden = areAmountsHidden,
+                        isStatementReminderEnabled = isStatementReminderEnabled,
                         onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
+                        onStatementReminderChanged = financeViewModel::setStatementReminderEnabled,
                         onImportFile = financeViewModel::importStatement,
                         onDismissImport = financeViewModel::clearImportState
                     )

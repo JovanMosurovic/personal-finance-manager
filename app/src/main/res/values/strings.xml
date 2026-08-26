@@ -173,6 +173,10 @@
     <string name="import_otp_error_no_transactions">No valid transactions were found in the selected file.</string>
     <string name="import_otp_error_read_failed">The selected file could not be opened.</string>
     <string name="import_otp_done">Done</string>
+    <string name="statement_reminder_title">Monthly OTP reminder</string>
+    <string name="statement_reminder_description">Receive a local reminder at the beginning of each month to import your latest OTP statement.</string>
+    <string name="statement_reminder_channel_name">OTP statement reminders</string>
+    <string name="statement_reminder_message">Import your latest OTP statement to update your finances.</string>
 
     <plurals name="import_otp_success">
         <item quantity="one">Imported %1$d of %2$d transaction from %3$s.</item>

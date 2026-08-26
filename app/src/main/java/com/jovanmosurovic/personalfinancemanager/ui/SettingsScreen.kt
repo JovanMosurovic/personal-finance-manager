@@ -1,9 +1,12 @@
 package com.jovanmosurovic.personalfinancemanager.ui
 
+import android.Manifest
+import android.os.Build
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +50,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.os.LocaleListCompat
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.importer.OtpImportFormat
@@ -64,7 +68,9 @@ private enum class AppLanguage(
 internal fun SettingsScreen(
     importState: ImportUiState,
     areAmountsHidden: Boolean,
+    isStatementReminderEnabled: Boolean,
     onAmountsVisibilityChanged: (Boolean) -> Unit,
+    onStatementReminderChanged: (Boolean) -> Unit,
     onImportFile: (Uri) -> Unit,
     onDismissImport: () -> Unit,
     modifier: Modifier = Modifier
@@ -72,9 +78,16 @@ internal fun SettingsScreen(
     val selectedLanguage = remember {
         currentAppLanguage()
     }
+    val context = LocalContext.current
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri -> uri?.let(onImportFile) }
+    )
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            if (granted) onStatementReminderChanged(true)
+        }
     )
 
     Column(
@@ -220,6 +233,48 @@ internal fun SettingsScreen(
                         } else {
                             stringResource(R.string.import_otp_action)
                         }
+                    )
+                }
+                Spacer(modifier = Modifier.height(18.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.statement_reminder_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = stringResource(R.string.statement_reminder_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = isStatementReminderEnabled,
+                        onCheckedChange = { enabled ->
+                            if (!enabled) {
+                                onStatementReminderChanged(false)
+                            } else if (
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                notificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                )
+                            } else {
+                                onStatementReminderChanged(true)
+                            }
+                        },
+                        colors = financeSwitchColors()
                     )
                 }
             }
