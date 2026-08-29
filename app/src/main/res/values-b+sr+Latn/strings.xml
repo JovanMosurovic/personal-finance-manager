@@ -12,8 +12,8 @@
     <string name="dashboard_subtitle">Jasan pregled vaših ličnih finansija.</string>
     <string name="balance_total">Ukupno stanje</string>
     <string name="balance_currency_label">Osnovna valuta: RSD</string>
-    <string name="income_this_month">Prihodi</string>
-    <string name="expenses_this_month">Troškovi</string>
+    <string name="income_this_month">Prihodi ovog meseca</string>
+    <string name="expenses_this_month">Troškovi ovog meseca</string>
     <string name="expense_chart_title">Pregled potrošnje</string>
     <string name="expense_chart_placeholder">Grafikon potrošnje će se pojaviti ovde.</string>
     <string name="dashboard_recent_transactions">Nedavna aktivnost</string>

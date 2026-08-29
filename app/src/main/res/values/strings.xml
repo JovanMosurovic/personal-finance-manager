@@ -11,8 +11,8 @@
     <string name="dashboard_subtitle">A clear view of your personal finances.</string>
     <string name="balance_total">Total balance</string>
     <string name="balance_currency_label">Primary currency: RSD</string>
-    <string name="income_this_month">Income</string>
-    <string name="expenses_this_month">Expenses</string>
+    <string name="income_this_month">Income this month</string>
+    <string name="expenses_this_month">Expenses this month</string>
     <string name="expense_chart_title">Spending overview</string>
     <string name="expense_chart_placeholder">Your spending chart will appear here.</string>
     <string name="dashboard_recent_transactions">Recent activity</string>

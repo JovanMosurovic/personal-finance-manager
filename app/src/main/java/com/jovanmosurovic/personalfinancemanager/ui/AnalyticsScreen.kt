@@ -66,7 +66,7 @@ internal fun AnalyticsScreen(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             AnalyticsPeriod.entries.forEach { period ->
                 FilterChip(
