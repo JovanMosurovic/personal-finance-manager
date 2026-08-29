@@ -84,11 +84,11 @@ internal fun DashboardScreen(
                 )
             }
         }
-        Text(
-            text = stringResource(R.string.dashboard_subtitle),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        // Text(
+        //     text = stringResource(R.string.dashboard_subtitle),
+        //     style = MaterialTheme.typography.bodyLarge,
+        //     color = MaterialTheme.colorScheme.onSurfaceVariant
+        // )
 
         Card(
             modifier = Modifier.fillMaxWidth(),

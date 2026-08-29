@@ -174,7 +174,7 @@ internal fun AnalyticsScreen(
 
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(end = 4.dp)
         ) {
             AnalyticsPeriod.entries.forEach { period ->

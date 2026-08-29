@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jovanmosurovic.personalfinancemanager.R
 import com.jovanmosurovic.personalfinancemanager.data.local.entity.CategoryEntity
@@ -58,12 +59,26 @@ internal fun MetricCard(
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = label,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = value,
+                    modifier = Modifier
+                        .weight(1f)
+                        .amountBlur(valueBlurred),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Icon(
                     imageVector = if (accentColor == MaterialTheme.colorScheme.secondary) {
@@ -76,12 +91,6 @@ internal fun MetricCard(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                modifier = Modifier.amountBlur(valueBlurred),
-                style = MaterialTheme.typography.titleMedium
-            )
         }
     }
 }

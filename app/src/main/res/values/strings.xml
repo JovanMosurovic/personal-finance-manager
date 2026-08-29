@@ -54,8 +54,8 @@
 
     <string name="analytics_title">Analytics</string>
     <string name="analytics_placeholder">Charts and comparisons will appear here.</string>
-    <string name="income_in_period">Income in selected period</string>
-    <string name="expenses_in_period">Expenses in selected period</string>
+    <string name="income_in_period">Income</string>
+    <string name="expenses_in_period">Expenses</string>
     <string name="net_in_period">Net in selected period</string>
     <string name="spending_by_category">Spending by category</string>
     <string name="analytics_period_7_days">Last 7 days</string>
