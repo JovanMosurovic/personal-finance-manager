@@ -259,7 +259,8 @@ internal fun CategoryAssignmentDialog(
                     )
                     Switch(
                         checked = rememberKeyword,
-                        onCheckedChange = { rememberKeyword = it }
+                        onCheckedChange = { rememberKeyword = it },
+                        colors = financeSwitchColors()
                     )
                 }
             }
