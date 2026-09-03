@@ -23,6 +23,14 @@
     <string name="privacy_title">Privatni režim</string>
     <string name="privacy_description">Sakrijte stanja i iznose transakcija u celoj aplikaciji.</string>
     <string name="amounts_hidden_chart">Potrošnja je sakrivena</string>
+    <string name="biometric_lock_title">Biometrijska zaštita</string>
+    <string name="biometric_lock_settings_description">Zahtevaj biometrijsku proveru pri otvaranju aplikacije.</string>
+    <string name="biometric_unavailable">Biometrijska zaštita nije dostupna. Prvo podesite otisak prsta ili biometriju uređaja.</string>
+    <string name="biometric_prompt_title">Otključaj lične finansije</string>
+    <string name="biometric_prompt_description">Potvrdite identitet da biste pristupili finansijskim podacima.</string>
+    <string name="biometric_lock_description">Potvrdite identitet otiskom prsta ili biometrijom uređaja da biste nastavili.</string>
+    <string name="biometric_authentication_failed">Provera identiteta je otkazana ili nije uspela.</string>
+    <string name="biometric_unlock">Otključaj</string>
 
     <string name="transactions_title">Transakcije</string>
     <string name="search_transactions_hint">Pretražite prodavca ili belešku</string>

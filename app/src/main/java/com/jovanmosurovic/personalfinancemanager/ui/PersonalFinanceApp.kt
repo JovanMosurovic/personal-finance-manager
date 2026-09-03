@@ -10,10 +10,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -31,6 +33,10 @@ fun PersonalFinanceApp() {
     val importState by financeViewModel.importState.collectAsStateWithLifecycle()
     val areAmountsHidden by financeViewModel.areAmountsHidden.collectAsStateWithLifecycle()
     val isStatementReminderEnabled by financeViewModel.isStatementReminderEnabled.collectAsStateWithLifecycle()
+    val isBiometricLockEnabled by financeViewModel.isBiometricLockEnabled.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val biometricAuthenticator = remember(context) { BiometricAuthenticator(context) }
+    var biometricSetupError by rememberSaveable { mutableStateOf(false) }
     val currentRoute by navController.currentBackStackEntryAsState()
     val route = currentRoute?.destination?.route
     val isAddTransactionRoute = route == ADD_TRANSACTION_ROUTE
@@ -56,6 +62,10 @@ fun PersonalFinanceApp() {
         }
     }
 
+    BiometricLock(
+        enabled = isBiometricLockEnabled,
+        authenticator = biometricAuthenticator
+    ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
@@ -129,8 +139,21 @@ fun PersonalFinanceApp() {
                         importState = importState,
                         areAmountsHidden = areAmountsHidden,
                         isStatementReminderEnabled = isStatementReminderEnabled,
+                        isBiometricLockEnabled = isBiometricLockEnabled,
+                        biometricSetupError = biometricSetupError,
                         onAmountsVisibilityChanged = financeViewModel::setAmountsHidden,
                         onStatementReminderChanged = financeViewModel::setStatementReminderEnabled,
+                        onBiometricLockChanged = { enabled ->
+                            if (enabled) {
+                                biometricSetupError = !biometricAuthenticator.canAuthenticate()
+                                if (!biometricSetupError) {
+                                    financeViewModel.setBiometricLockEnabled(true)
+                                }
+                            } else {
+                                biometricSetupError = false
+                                financeViewModel.setBiometricLockEnabled(false)
+                            }
+                        },
                         onImportFile = financeViewModel::importStatement,
                         onDismissImport = financeViewModel::clearImportState
                     )
@@ -146,6 +169,7 @@ fun PersonalFinanceApp() {
                 }
             }
         }
+    }
     }
 }
 

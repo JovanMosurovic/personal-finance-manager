@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -69,8 +70,11 @@ internal fun SettingsScreen(
     importState: ImportUiState,
     areAmountsHidden: Boolean,
     isStatementReminderEnabled: Boolean,
+    isBiometricLockEnabled: Boolean,
+    biometricSetupError: Boolean,
     onAmountsVisibilityChanged: (Boolean) -> Unit,
     onStatementReminderChanged: (Boolean) -> Unit,
+    onBiometricLockChanged: (Boolean) -> Unit,
     onImportFile: (Uri) -> Unit,
     onDismissImport: () -> Unit,
     modifier: Modifier = Modifier
@@ -176,6 +180,58 @@ internal fun SettingsScreen(
                     onCheckedChange = onAmountsVisibilityChanged,
                     colors = financeSwitchColors()
                 )
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.biometric_lock_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = stringResource(R.string.biometric_lock_settings_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = isBiometricLockEnabled,
+                        onCheckedChange = onBiometricLockChanged,
+                        colors = financeSwitchColors()
+                    )
+                }
+                if (biometricSetupError) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.biometric_unavailable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         }
         Card(

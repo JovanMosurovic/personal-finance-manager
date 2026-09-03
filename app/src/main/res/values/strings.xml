@@ -22,6 +22,14 @@
     <string name="privacy_title">Privacy mode</string>
     <string name="privacy_description">Hide balances and transaction amounts across the app.</string>
     <string name="amounts_hidden_chart">Spending is hidden</string>
+    <string name="biometric_lock_title">Biometric lock</string>
+    <string name="biometric_lock_settings_description">Require biometric authentication when opening the app.</string>
+    <string name="biometric_unavailable">Biometric authentication is not available. Set up a fingerprint or device biometric first.</string>
+    <string name="biometric_prompt_title">Unlock Personal Finance</string>
+    <string name="biometric_prompt_description">Authenticate to access your financial data.</string>
+    <string name="biometric_lock_description">Authenticate with your fingerprint or device biometric to continue.</string>
+    <string name="biometric_authentication_failed">Authentication was cancelled or failed.</string>
+    <string name="biometric_unlock">Unlock</string>
 
     <string name="transactions_title">Transactions</string>
     <string name="search_transactions_hint">Search merchant or note</string>

@@ -72,9 +72,13 @@ class FinanceViewModel @Inject constructor(
     private val _isStatementReminderEnabled = MutableStateFlow(
         preferences.getBoolean(KEY_STATEMENT_REMINDER_ENABLED, false)
     )
+    private val _isBiometricLockEnabled = MutableStateFlow(
+        preferences.getBoolean(KEY_BIOMETRIC_LOCK_ENABLED, false)
+    )
     val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
     val areAmountsHidden: StateFlow<Boolean> = _areAmountsHidden.asStateFlow()
     val isStatementReminderEnabled: StateFlow<Boolean> = _isStatementReminderEnabled.asStateFlow()
+    val isBiometricLockEnabled: StateFlow<Boolean> = _isBiometricLockEnabled.asStateFlow()
     private val statementImportService = StatementImportService(application, repository)
 
     val uiState: StateFlow<FinanceUiState> = combine(
@@ -233,8 +237,16 @@ class FinanceViewModel @Inject constructor(
         }
     }
 
+    fun setBiometricLockEnabled(enabled: Boolean) {
+        _isBiometricLockEnabled.value = enabled
+        preferences.edit {
+            putBoolean(KEY_BIOMETRIC_LOCK_ENABLED, enabled)
+        }
+    }
+
 }
 
 private const val PREFERENCES_NAME = "finance_preferences"
 private const val KEY_HIDE_AMOUNTS = "hide_amounts"
 private const val KEY_STATEMENT_REMINDER_ENABLED = "statement_reminder_enabled"
+private const val KEY_BIOMETRIC_LOCK_ENABLED = "biometric_lock_enabled"
